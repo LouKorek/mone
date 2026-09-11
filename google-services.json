@@ -45,6 +45,13 @@
             {
               "client_id": "1036744435942-khcgc1t5r9a779msplpostu2klj4mbq9.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "1036744435942-e5katc0mcjfkf3b3snv63k2pttt5m31l.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.loukorek.mone"
+              }
             }
           ]
         }
