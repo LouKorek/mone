@@ -1,0 +1,85 @@
+# בונה את אפליקציית iOS של "מונה" על macOS בענן ומעלה ל-TestFlight.
+# דורש Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (base64 של קובץ ה-.p8), APPLE_TEAM_ID,
+#               MATCH_GIT_URL (ריפו פרטי לתעודות), MATCH_GIT_TOKEN (PAT עם גישה אליו), MATCH_PASSWORD.
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'plan.html', '.github/workflows/android.yml', 'netlify.toml']
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.IOS_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: false
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Install
+        run: |
+          npm install --no-audit --no-fund
+          gem install fastlane -N
+
+      - name: Test
+        run: npm test
+        env:
+          TZ: Asia/Jerusalem
+
+      - name: Build web
+        run: node build.mjs
+
+      - name: Create iOS project
+        run: npx cap add ios
+
+      - name: Prepare iOS project
+        run: node native/prepare-ios.mjs
+        env:
+          IOS_BUILD_NUMBER: ${{ github.run_number }}
+
+      - name: Icons and splash
+        run: npx capacitor-assets generate --ios --iconBackgroundColor '#060d13' --iconBackgroundColorDark '#060d13' --splashBackgroundColor '#060d13' --splashBackgroundColorDark '#060d13'
+
+      - name: Sync plugins (CocoaPods)
+        run: npx cap sync ios
+
+      - name: Build and upload to TestFlight
+        run: fastlane ios beta
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_TOKEN: ${{ secrets.MATCH_GIT_TOKEN }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mone-ios-${{ github.run_number }}
+          path: |
+            out/*.ipa
+            ~/Library/Logs/gym/*.log
+          retention-days: 30
+          if-no-files-found: ignore

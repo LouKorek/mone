@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>1036744435942-e5katc0mcjfkf3b3snv63k2pttt5m31l.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.1036744435942-e5katc0mcjfkf3b3snv63k2pttt5m31l</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>1036744435942-3kvmu3h957d7hbmm7bmuiafohapinh6g.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyA2Deut6CDZBzUAXf9eG2a9bQK-1t8ozwE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1036744435942</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.loukorek.mone</string>
+	<key>PROJECT_ID</key>
+	<string>mone-taxi</string>
+	<key>STORAGE_BUCKET</key>
+	<string>mone-taxi.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1036744435942:ios:098a9a6e9bf46d9d233327</string>
+</dict>
+</plist>

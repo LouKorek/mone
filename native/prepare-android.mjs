@@ -29,7 +29,17 @@ edit('app/build.gradle', (s) => {
   if (!/com\.google\.gms\.google-services/.test(s)) s += `\napply plugin: 'com.google.gms.google-services'\n`;
   s = s.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`).replace(/versionName\s+"[^"]*"/, `versionName "${versionName}"`);
   if (process.env.ANDROID_KEYSTORE_BASE64 && !/signingConfigs\s*\{/.test(s)) {
-    writeFileSync(resolve(android, 'app/release.keystore'), Buffer.from(process.env.ANDROID_KEYSTORE_BASE64, 'base64'));
+    // מפענחים את המפתח (מסירים רווחים/שורות שנוספו בהדבקה) ובודקים שזה באמת keystore
+    const b64 = process.env.ANDROID_KEYSTORE_BASE64.replace(/[^A-Za-z0-9+/=]/g, '');
+    const ks = Buffer.from(b64, 'base64');
+    const head = ks.subarray(0, 4).toString('hex');
+    const looksPkcs12 = head.startsWith('3082'), looksJks = head === 'feedfeed';
+    console.log(`keystore: ${ks.length} bytes, header ${head} (${looksPkcs12 ? 'PKCS12' : looksJks ? 'JKS' : 'לא מזוהה'})`);
+    if (!looksPkcs12 && !looksJks) {
+      console.error('ANDROID_KEYSTORE_BASE64 לא מפוענח לקובץ keystore תקין. צור מחדש: [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\\mone-upload.jks")) והדבק כערך ה-Secret.');
+      process.exit(2);
+    }
+    writeFileSync(resolve(android, 'app/release.keystore'), ks);
     s = s.replace(/android\s*\{/, `android {
     signingConfigs {
         release {
