@@ -305,14 +305,102 @@ function openRideSheet(ride, justEnded) {
     ${breakdownHtml(fare)}
     <label class="field asked"><span>הנהג ביקש</span><input id="rideAsked" type="number" inputmode="decimal" min="0" step="1" placeholder="₪" value="${ride.asked || ''}"></label>
     <div id="rideDiff">${diffHtml(ride.asked, ride.total)}</div>
-    <div class="actions">${justEnded ? '<button class="btn" id="rideNew" type="button">נסיעה חדשה</button>' : '<button class="btn ghost" id="rideDel" type="button">מחק נסיעה</button>'}</div>`;
+    <div class="actions"><button class="btn" id="rideReceipt" type="button">קבלה לשיתוף</button>${justEnded ? '<button class="btn ghost" id="rideNew" type="button">נסיעה חדשה</button>' : '<button class="btn ghost" id="rideDel" type="button">מחק</button>'}</div>`;
   openSheet(justEnded ? 'סיכום הנסיעה' : 'פרטי הנסיעה', html, (b) => {
     const mm = b.querySelector('#miniMap'); if (mm) miniMap(mm, ride.track);
     b.querySelector('#rideAsked').addEventListener('input', (e) => { ride.asked = Number(e.target.value) || null; updateRide(ride); b.querySelector('#rideDiff').innerHTML = diffHtml(ride.asked, ride.total); });
+    b.querySelector('#rideReceipt').addEventListener('click', () => { onSheetClose = null; openReceipt(ride); });
     b.querySelector('#rideNew')?.addEventListener('click', () => { closeSheet(); resetRide(); });
     b.querySelector('#rideDel')?.addEventListener('click', () => { storeRides(loadRides().filter(r => r.id !== ride.id)); closeSheet(); renderRides(); });
   });
   if (justEnded) onSheetClose = () => { if (!live.timer) resetRide(); };
+}
+
+
+// ============ קבלה בפורמט מונה ============
+const APP_URL = 'mone-taxi.netlify.app';
+function receiptLines(ride) {
+  const start = new Date(ride.at), end = ride.end ? new Date(ride.end) : null;
+  const hm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const head = [
+    ['תאריך', `${pad2(start.getDate())}.${pad2(start.getMonth() + 1)}.${start.getFullYear()}`],
+    ['התחלה', hm(start)], ['סיום', end ? hm(end) : '—'],
+    ['מונית מס\'', ride.taxi || '—'], ['נהג', ride.driver || '—'],
+    ['תעריף', `${ride.tariffLabel.replace(/תעריף /g, '')} · ${ride.dayLabel}`],
+    ['מרחק', `${ride.km.toFixed(2)} ק"מ`], ['זמן', `${Math.round(ride.minutes)} דק'`],
+  ];
+  const items = ride.lines.map(l => [l.label, l.amount.toFixed(2)]);
+  const foot = [['סה"כ לתשלום', nis(ride.total)], ['במזומן (עיגול)', nis(ride.cashTotal)]];
+  if (ride.asked > 0) foot.push(['הנהג ביקש', nis(ride.asked)], [ride.asked - ride.total > 0.5 ? 'פער מעל המחיר המרבי' : 'פער', nis(ride.asked - ride.total)]);
+  return { head, items, foot };
+}
+function renderReceipt(ride) {
+  const W = 480, pad = 28, lh = 30;
+  const { head, items, foot } = receiptLines(ride);
+  const mono = '"IBM Plex Mono", "Courier New", monospace', heb = '"Heebo", "Arial Hebrew", Arial, sans-serif';
+  const hasHeb = (v) => /[֐-׿]/.test(v);
+  // מעבר ראשון מודד את הגובה, השני מצייר
+  const draw = (x, H) => {
+    let y = 44;
+    if (x) {
+      x.fillStyle = '#fbfaf5'; x.fillRect(0, 0, W, H);
+      x.fillStyle = '#efece3';
+      for (let i = 0; i < W; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 8, 0); x.lineTo(i + 4, 6); x.closePath(); x.fill(); x.beginPath(); x.moveTo(i, H); x.lineTo(i + 8, H); x.lineTo(i + 4, H - 6); x.closePath(); x.fill(); }
+      x.direction = 'rtl'; x.fillStyle = '#1c1f26'; x.textAlign = 'center';
+      x.font = `700 26px ${heb}`; x.fillText('מ ו נ ה', W / 2, y);
+    }
+    y += 26;
+    if (x) { x.font = `500 14px ${heb}`; x.fillText('קבלת נסיעה · הערכה לפי צו מחירי הנסיעה במוניות', W / 2, y); } y += 18;
+    if (x) { x.font = `12px ${heb}`; x.fillStyle = '#666'; x.fillText('(אינה חשבונית מס — המונה במונית הוא הקובע)', W / 2, y); } y += 22;
+    const dash = () => { if (x) { x.strokeStyle = '#999'; x.setLineDash([4, 4]); x.beginPath(); x.moveTo(pad, y); x.lineTo(W - pad, y); x.stroke(); x.setLineDash([]); } y += 18; };
+    const row = (k, v, bold) => {
+      if (x) {
+        x.fillStyle = '#1c1f26'; x.textAlign = 'right'; x.direction = 'rtl'; x.font = `${bold ? 700 : 400} 15px ${heb}`; x.fillText(k, W - pad, y);
+        x.textAlign = 'left';
+        if (hasHeb(v)) { x.direction = 'rtl'; x.font = `${bold ? 700 : 500} 15px ${heb}`; }
+        else { x.direction = 'ltr'; x.font = `${bold ? 600 : 400} 15px ${mono}`; }
+        x.fillText(v, pad, y); x.direction = 'rtl';
+      }
+      y += lh;
+    };
+    dash(); head.forEach(([k, v]) => row(k, v)); y += 4; dash();
+    items.forEach(([k, v]) => row(k, v)); y += 4; dash();
+    foot.forEach(([k, v], i) => row(k, v, i === 0)); y += 4; dash();
+    if (x) { x.textAlign = 'center'; x.fillStyle = '#666'; x.font = `12px ${heb}`; x.fillText('חושב ב"מונה" לפי הצו שבתוקף · ' + APP_URL, W / 2, y + 4); }
+    y += 20;
+    if (x) x.fillText('מדידת GPS עשויה לסטות בכמה אחוזים מהמונה במונית', W / 2, y + 4);
+    return y + 40;
+  };
+  const H = draw(null, 0);
+  const c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2;
+  const x = c.getContext('2d'); x.scale(2, 2); draw(x, H);
+  return c;
+}
+async function shareReceipt(ride, btn) {
+  const canvas = renderReceipt(ride);
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+  const file = new File([blob], `mone-${ride.id}.png`, { type: 'image/png' });
+  const text = `קבלת נסיעה מ"מונה": ${ride.km.toFixed(1)} ק"מ, ${Math.round(ride.minutes)} דק', ${ride.tariffLabel} — ${nis(ride.total)} (מחיר מרבי לפי הצו).`;
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'קבלת נסיעה — מונה', text }); return; }
+    if (navigator.share) { await navigator.share({ title: 'קבלת נסיעה — מונה', text: text + ' ' + APP_URL }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+  if (btn) btn.textContent = 'הקבלה נשמרה כתמונה';
+}
+function openReceipt(ride) {
+  openSheet('קבלת הנסיעה', `
+    <div class="row2"><label class="field"><span>מונית מס'</span><input id="rTaxi" type="text" inputmode="numeric" value="${esc(ride.taxi || '')}" placeholder="על הגג"></label>
+    <label class="field"><span>נהג</span><input id="rDriver" type="text" value="${esc(ride.driver || '')}" placeholder="מהלוחית"></label></div>
+    <img id="rImg" class="receipt-img" alt="קבלת נסיעה">
+    <div class="actions"><button class="btn" id="rShare" type="button">שתף קבלה</button></div>`, (b) => {
+    const img = b.querySelector('#rImg');
+    const refresh = () => { img.src = renderReceipt(ride).toDataURL('image/png'); };
+    ['rTaxi', 'rDriver'].forEach(id => b.querySelector('#' + id).addEventListener('input', (e) => { ride[id === 'rTaxi' ? 'taxi' : 'driver'] = e.target.value.trim(); updateRide(ride); refresh(); }));
+    b.querySelector('#rShare').onclick = (e) => shareReceipt(ride, e.currentTarget);
+    if (document.fonts?.ready) document.fonts.ready.then(refresh); else refresh();
+    refresh();
+  });
 }
 
 // ============ עוד ============

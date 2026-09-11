@@ -145,3 +145,6 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .start-marker { width: 14px; height: 14px; border-radius: 50%; background: var(--meter-fg); border: 2px solid #0b1210; box-shadow: 0 0 0 3px rgba(92,240,138,.35); }
 .recenter { position: absolute; bottom: 10px; inset-inline-start: 10px; z-index: 500; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: rgba(15,20,29,.9); color: var(--accent); font-size: 18px; }
 .mini-map { height: 150px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.receipt-img { width: 100%; max-height: 52dvh; object-fit: contain; border-radius: 8px; background: #fbfaf5; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.sheet .row2 { grid-template-columns: 1.2fr 1fr; }
+.sheet .row2 .field input { font-size: 15px; width: 40px; }
