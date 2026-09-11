@@ -20,6 +20,7 @@ function showView(name) {
   document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + name; });
   $('topSub').textContent = SUBTITLES[name];
   if (name === 'rides') renderRides();
+  if (name === 'live' && gmap.map) setTimeout(() => gmap.map.invalidateSize(), 50);
 }
 
 // ============ גיליון תחתון ============
@@ -121,6 +122,60 @@ function recalc() {
 $('when').value = toLocalInputValue(new Date());
 recalc();
 
+
+// ============ מפה (Leaflet + OpenStreetMap) ============
+const TAXI_SVG = `<svg viewBox="0 0 32 32"><path d="M7 14l2.2-5A3 3 0 0 1 12 7h8a3 3 0 0 1 2.8 2l2.2 5h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-1v2a2 2 0 0 1-4 0v-2H11v2a2 2 0 0 1-4 0v-2H6a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2zm3.2 0h11.6l-1.4-3.2a1 1 0 0 0-.9-.6h-7a1 1 0 0 0-.9.6zM8 19a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0zm13 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0z" fill="#f2b91d"/><rect x="13" y="4" width="6" height="3" rx="1" fill="#f2b91d"/></svg>`;
+const gmap = { map: null, line: null, taxi: null, start: null, follow: true, lastHeading: 0 };
+function hasLeaflet() { return typeof window.L !== 'undefined'; }
+function ensureMap() {
+  if (gmap.map || !hasLeaflet()) return gmap.map;
+  $('mapEmpty').hidden = true;
+  const m = L.map('map', { zoomControl: false, attributionControl: true });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m);
+  m.setView([32.08, 34.78], 13);
+  m.on('dragstart', () => { gmap.follow = false; $('recenter').hidden = false; });
+  gmap.line = L.polyline([], { color: '#f2b91d', weight: 5, opacity: .95, lineJoin: 'round' }).addTo(m);
+  gmap.map = m;
+  return m;
+}
+$('recenter').addEventListener('click', () => { gmap.follow = true; $('recenter').hidden = true; if (live.lastFix) gmap.map.setView([live.lastFix.lat, live.lastFix.lon], Math.max(gmap.map.getZoom(), 16)); });
+function mapReset() {
+  if (!gmap.map) return;
+  gmap.line.setLatLngs([]); gmap.taxi?.remove(); gmap.taxi = null; gmap.start?.remove(); gmap.start = null; gmap.follow = true; $('recenter').hidden = true;
+}
+function mapAddPoint(lat, lon, heading) {
+  const m = ensureMap(); if (!m) return;
+  if (!gmap.start) {
+    gmap.start = L.marker([lat, lon], { icon: L.divIcon({ className: 'start-marker', iconSize: [14, 14] }), interactive: false }).addTo(m);
+    m.setView([lat, lon], 16);
+  }
+  gmap.line.addLatLng([lat, lon]);
+  if (!gmap.taxi) gmap.taxi = L.marker([lat, lon], { icon: L.divIcon({ className: 'taxi-marker', html: TAXI_SVG, iconSize: [34, 34], iconAnchor: [17, 17] }), interactive: false }).addTo(m);
+  else gmap.taxi.setLatLng([lat, lon]);
+  if (heading != null) { const svg = gmap.taxi.getElement()?.querySelector('svg'); if (svg) svg.style.transform = `rotate(${heading}deg)`; }
+  if (gmap.follow) m.panTo([lat, lon], { animate: true, duration: .5 });
+}
+function mapFinish(track) {
+  if (!gmap.map || track.length < 2) return;
+  gmap.follow = false; $('recenter').hidden = true;
+  gmap.map.fitBounds(L.latLngBounds(track), { padding: [24, 24], maxZoom: 16 });
+}
+function bearing(a, b) {
+  const r = (x) => x * Math.PI / 180, y = Math.sin(r(b[1] - a[1])) * Math.cos(r(b[0]));
+  const x = Math.cos(r(a[0])) * Math.sin(r(b[0])) - Math.sin(r(a[0])) * Math.cos(r(b[0])) * Math.cos(r(b[1] - a[1]));
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+// מפה קטנה בתוך גיליון (פרטי נסיעה)
+function miniMap(el, track) {
+  if (!hasLeaflet() || !track || track.length < 2) { el.remove(); return; }
+  const m = L.map(el, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, touchZoom: false, doubleClickZoom: false });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(m);
+  L.polyline(track, { color: '#f2b91d', weight: 4 }).addTo(m);
+  L.marker(track[0], { icon: L.divIcon({ className: 'start-marker', iconSize: [12, 12] }), interactive: false }).addTo(m);
+  L.marker(track[track.length - 1], { icon: L.divIcon({ className: 'taxi-marker', html: TAXI_SVG, iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false }).addTo(m);
+  setTimeout(() => { m.invalidateSize(); m.fitBounds(L.latLngBounds(track), { padding: [16, 16], maxZoom: 16 }); }, 50);
+}
+
 // ============ מונה חי ============
 const live = { meter: null, watchId: null, timer: null, lastFix: null, lastTickAt: null, wakeLock: null, speed: null, opts: newOpts(), track: [] };
 const STORE_KEY = 'mone.liveRide';
@@ -131,6 +186,8 @@ $('liveStop').addEventListener('click', stopRide);
 function startRide(resumed) {
   if (!live.meter) { live.meter = new LiveMeter(new Date(), live.opts); live.track = []; }
   live.lastTickAt = Date.now(); live.lastFix = null; live.speed = null;
+  mapReset(); ensureMap(); if (gmap.map) setTimeout(() => gmap.map.invalidateSize(), 100);
+  live.track.forEach((pt, i) => mapAddPoint(pt[0], pt[1], i > 0 ? bearing(live.track[i - 1], pt) : null));
   $('liveStart').hidden = true; $('liveStop').hidden = false;
   $('livePrice').classList.add('running');
   $('mapEmpty').textContent = resumed ? 'הנסיעה שוחזרה מהזיכרון וממשיכה' : 'המפה תופיע כאן בזמן הנסיעה';
@@ -162,9 +219,10 @@ function onFix(pos) {
     if (d > noise && implied < 160) {
       live.meter.tick(new Date(t), 0, d);
       live.track.push([lat, lon]);
+      mapAddPoint(lat, lon, bearing([live.lastFix.lat, live.lastFix.lon], [lat, lon]));
       if (live.speed == null) live.speed = implied;
     }
-  } else live.track.push([lat, lon]);
+  } else { live.track.push([lat, lon]); mapAddPoint(lat, lon, null); }
   live.lastFix = { lat, lon, t, acc: accuracy };
   renderMeter();
 }
@@ -200,6 +258,7 @@ function stopRide() {
   live.wakeLock?.release?.(); live.wakeLock = null;
   try { localStorage.removeItem(STORE_KEY); } catch (e) { /* */ }
   $('livePrice').classList.remove('running'); $('liveStop').hidden = true; $('meterGps').textContent = 'GPS כבוי';
+  mapFinish(live.track);
   const fare = live.meter.snapshot();
   const ride = { id: Date.now(), at: live.meter.start.toISOString(), end: new Date().toISOString(), km: fare.km, minutes: fare.minutes, total: fare.total, cashTotal: fare.cashTotal, tariffLabel: fare.tariffLabel, dayLabel: fare.dayLabel, period: fare.period, lines: fare.lines, opts: { ...live.meter.opts }, track: live.track, asked: null };
   saveRide(ride);
@@ -208,6 +267,7 @@ function stopRide() {
 }
 function resetRide() {
   live.meter = null; live.speed = null; live.lastFix = null; live.track = [];
+  mapReset(); if (gmap.map) { gmap.map.remove(); gmap.map = null; $('mapEmpty').hidden = false; }
   $('liveStart').hidden = false; $('mapEmpty').textContent = 'המפה תופיע כאן בזמן הנסיעה';
   renderMeter();
 }
@@ -241,11 +301,13 @@ function renderRides() {
 function openRideSheet(ride, justEnded) {
   const fare = { lines: ride.lines, total: ride.total, cashTotal: ride.cashTotal, tariffLabel: ride.tariffLabel, dayLabel: ride.dayLabel, period: ride.period };
   const html = `<p class="note">${fmtDT(new Date(ride.at))} · ${ride.km.toFixed(2)} ק"מ · ${Math.round(ride.minutes)} דק'</p>
+    ${!justEnded && ride.track && ride.track.length > 1 ? '<div class="mini-map" id="miniMap"></div>' : ''}
     ${breakdownHtml(fare)}
     <label class="field asked"><span>הנהג ביקש</span><input id="rideAsked" type="number" inputmode="decimal" min="0" step="1" placeholder="₪" value="${ride.asked || ''}"></label>
     <div id="rideDiff">${diffHtml(ride.asked, ride.total)}</div>
     <div class="actions">${justEnded ? '<button class="btn" id="rideNew" type="button">נסיעה חדשה</button>' : '<button class="btn ghost" id="rideDel" type="button">מחק נסיעה</button>'}</div>`;
   openSheet(justEnded ? 'סיכום הנסיעה' : 'פרטי הנסיעה', html, (b) => {
+    const mm = b.querySelector('#miniMap'); if (mm) miniMap(mm, ride.track);
     b.querySelector('#rideAsked').addEventListener('input', (e) => { ride.asked = Number(e.target.value) || null; updateRide(ride); b.querySelector('#rideDiff').innerHTML = diffHtml(ride.asked, ride.total); });
     b.querySelector('#rideNew')?.addEventListener('click', () => { closeSheet(); resetRide(); });
     b.querySelector('#rideDel')?.addEventListener('click', () => { storeRides(loadRides().filter(r => r.id !== ride.id)); closeSheet(); renderRides(); });

@@ -12,6 +12,7 @@
 <link rel="icon" href="icons/icon-64.png" sizes="64x64" type="image/png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@900&family=Heebo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="">
 <link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
@@ -67,7 +68,7 @@
         <span class="sub" id="meterSub">מוכן לנסיעה</span>
         <span class="stats"><b id="meterKm">0.00</b> ק"מ · <b id="meterTime">00:00</b> · <b id="meterSpeed">—</b> קמ"ש</span>
       </div>
-      <div class="map" id="map"><div class="map-empty" id="mapEmpty">המפה תופיע כאן בזמן הנסיעה</div><div class="gps" id="meterGps">GPS כבוי</div></div>
+      <div class="map" id="map"><div class="map-empty" id="mapEmpty">המפה תופיע כאן בזמן הנסיעה</div><div class="gps" id="meterGps">GPS כבוי</div><button class="recenter" id="recenter" type="button" aria-label="חזור למיקום" hidden>◎</button></div>
       <div class="tiles compact" id="liveTiles" role="group" aria-label="תוספות לנסיעה"></div>
       <button class="btn" id="liveStart" type="button">התחל נסיעה</button>
       <button class="btn warn" id="liveStop" type="button" hidden>סיים נסיעה</button>
@@ -107,6 +108,7 @@
   <div class="sheet-body" id="sheetBody"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin=""></script>
 <script type="module" src="src/app.js"></script>
 </body>
 </html>
