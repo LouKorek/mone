@@ -2,6 +2,7 @@
 // google-services.json, הרשאות מיקום, Google Sign-In, מספר גרסה וחתימה (אם יש מפתח).
 // מריצים אחרי `npx cap add android` ולפני `npx cap sync android`.
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,13 +41,28 @@ edit('app/build.gradle', (s) => {
       process.exit(2);
     }
     writeFileSync(resolve(android, 'app/release.keystore'), ks);
-    s = s.replace(/android\s*\{/, `android {
+    // הסיסמאות: מנקים רווחים/שורות שנוספו בהדבקה, ובודקים מראש שהן פותחות את המפתח
+    const storePassword = (process.env.ANDROID_KEYSTORE_PASSWORD || '').trim();
+    const keyAlias = (process.env.ANDROID_KEY_ALIAS || 'mone').trim();
+    const keyPassword = (process.env.ANDROID_KEY_PASSWORD || storePassword).trim();
+    const opens = (pw) => { try { execFileSync('keytool', ['-list', '-keystore', resolve(android, 'app/release.keystore'), '-storepass', pw], { stdio: 'pipe' }); return true; } catch { return false; } };
+    if (!storePassword || !opens(storePassword)) {
+      console.error(opens('SECRET')
+        ? 'ANDROID_KEYSTORE_PASSWORD לא תואם: המפתח עדיין מוגן בסיסמה SECRET — פקודת keytool -storepasswd לא בוצעה, או שהודבק המפתח הישן.'
+        : `ANDROID_KEYSTORE_PASSWORD (${storePassword.length} תווים) לא פותח את המפתח. בדוק את הסיסמה ב-Secrets.`);
+      process.exit(3);
+    }
+    console.log('סיסמת המפתח אומתה');
+    writeFileSync(resolve(android, 'keystore.properties'), `storePassword=${storePassword}\nkeyAlias=${keyAlias}\nkeyPassword=${keyPassword}\n`);
+    s = s.replace(/android\s*\{/, `def ksProps = new Properties()
+ksProps.load(new FileInputStream(rootProject.file('keystore.properties')))
+android {
     signingConfigs {
         release {
             storeFile file('release.keystore')
-            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
-            keyAlias System.getenv('ANDROID_KEY_ALIAS')
-            keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            storePassword ksProps['storePassword']
+            keyAlias ksProps['keyAlias']
+            keyPassword ksProps['keyPassword']
         }
     }`);
     s = s.replace(/buildTypes\s*\{\s*release\s*\{/, `buildTypes {\n        debug {\n            signingConfig signingConfigs.release\n        }\n        release {\n            signingConfig signingConfigs.release`);
