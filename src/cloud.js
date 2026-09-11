@@ -35,7 +35,22 @@ export async function signUpEmail(email, password, name) {
   if (name) await A.updateProfile(cred.user, { displayName: name });
   return cred.user;
 }
-export async function signInEmail(email, password) { const { A, auth } = await initCloud(); return (await A.signInWithEmailAndPassword(auth, email, password)).user; }
+// התחברות אחת: אם אין עדיין חשבון לאימייל — נוצר אוטומטית באותה לחיצה.
+export async function signInOrRegister(email, password) {
+  const { A, auth } = await initCloud();
+  try { return { user: (await A.signInWithEmailAndPassword(auth, email, password)).user, created: false }; }
+  catch (e) {
+    if (!['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password'].includes(e.code)) throw e;
+    try {
+      const cred = await A.createUserWithEmailAndPassword(auth, email, password);
+      await A.updateProfile(cred.user, { displayName: email.split('@')[0] }).catch(() => {});
+      return { user: cred.user, created: true };
+    } catch (e2) {
+      if (e2.code === 'auth/email-already-in-use') { const err = new Error('wrong password'); err.code = 'auth/wrong-password'; throw err; }
+      throw e2;
+    }
+  }
+}
 export async function resetPassword(email) { const { A, auth } = await initCloud(); await A.sendPasswordResetEmail(auth, email); }
 export async function signInGoogle() {
   const { A, auth } = await initCloud();

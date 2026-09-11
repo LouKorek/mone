@@ -1,6 +1,7 @@
 import { loadTariffs, computeFare, tariffAt, activePeriod, getTariffs, TARIFF_NAMES, LiveMeter } from './engine.js';
 import tariffs from './data/tariffs.json' with { type: 'json' };
-import { initCloud, onUser, getUser, signUpEmail, signInEmail, resetPassword, signInGoogle, signOut, pushRides, pullRides, deleteRideCloud, deleteAccount, errorHe } from './cloud.js';
+import { DOCS, docHtml } from './legal.js';
+import { initCloud, onUser, getUser, signInOrRegister, resetPassword, signInGoogle, signOut, pushRides, pullRides, deleteRideCloud, deleteAccount, errorHe } from './cloud.js';
 
 loadTariffs(tariffs);
 
@@ -23,6 +24,9 @@ function showView(name) {
   if (name === 'rides') renderRides();
   if (name === 'live' && gmap.map) setTimeout(() => gmap.map.invalidateSize(), 50);
 }
+
+// ============ הודעה קצרה ============
+function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3200); }
 
 // ============ גיליון תחתון ============
 const sheet = $('sheet'), backdrop = $('sheetBackdrop');
@@ -60,7 +64,8 @@ const newOpts = () => ({ order: false, airport: null, road6: false, segment18: f
 function renderTiles(container, opts, period, onChange) {
   container.innerHTML = TILES.map(t => {
     const label = typeof t.label === 'function' ? t.label(opts) : t.label;
-    return `<button type="button" class="tile ${t.cls || ''}" data-key="${t.key}" aria-pressed="${t.on(opts)}"><svg><use href="#i-${t.icon}"/></svg>${label}<small>${t.price(period, opts)}</small></button>`;
+    const price = t.price(period, opts);
+    return `<button type="button" class="tile ${t.cls || ''}" data-key="${t.key}" aria-pressed="${t.on(opts)}" aria-label="${label}, ${price}"><svg aria-hidden="true"><use href="#i-${t.icon}"/></svg>${label}<small aria-hidden="true">${price}</small></button>`;
   }).join('');
   container.onclick = (e) => {
     const btn = e.target.closest('.tile'); if (!btn) return;
@@ -405,12 +410,12 @@ function openReceipt(ride) {
 }
 
 // ============ עוד ============
-document.querySelectorAll('#view-more [data-sheet]').forEach(b => b.addEventListener('click', () => ({ account: openAccount, tariffs: openTariffs, rights: openRights, complaint: openComplaint, about: openAbout })[b.dataset.sheet]()));
+document.querySelectorAll('#view-more [data-sheet]').forEach(b => b.addEventListener('click', () => ({ account: openAccount, tariffs: openTariffs, rights: openRights, complaint: openComplaint, about: openAbout, terms: () => openDoc('terms'), privacy: () => openDoc('privacy'), accessibility: () => openDoc('accessibility') })[b.dataset.sheet]()));
 
 
 // ============ חשבון (Firebase) ============
 let cloudReady = false;
-function accountLabel(u) { return u ? (u.displayName || u.email || 'מחובר') : 'התחברות / הרשמה'; }
+function accountLabel(u) { return u ? (u.displayName || u.email || 'מחובר') : 'התחברות'; }
 function renderAccountRow() {
   const u = getUser();
   $('accountLabel').textContent = accountLabel(u);
@@ -439,28 +444,26 @@ function openAccount() {
   if (!cloudReady) return openSheet('חשבון', '<p class="note">החיבור לענן עדיין נטען, או שאין אינטרנט. הנסיעות נשמרות בינתיים במכשיר.</p>');
   if (u) return openProfile(u);
   openSheet('התחברות', `
-    <div class="seg" role="tablist"><button type="button" class="on" data-mode="in">התחברות</button><button type="button" data-mode="up">הרשמה</button></div>
-    <label class="field" id="nameRow" hidden><span>שם</span><input id="aName" type="text" autocomplete="name" placeholder="איך לקרוא לך"></label>
+    <button class="btn" id="aGoogle" type="button"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10c.8-2.3 3-4 5.6-4z"/></svg> המשך עם Google</button>
+    <div class="or"><span>או באימייל</span></div>
     <label class="field"><span>אימייל</span><input id="aEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" dir="ltr"></label>
     <label class="field"><span>סיסמה</span><input id="aPass" type="password" autocomplete="current-password" placeholder="6 תווים לפחות" dir="ltr"></label>
     <p class="err" id="aErr" hidden></p>
-    <button class="btn" id="aGo" type="button">התחבר</button>
-    <button class="btn ghost" id="aGoogle" type="button"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10c.8-2.3 3-4 5.6-4z"/></svg> המשך עם Google</button>
+    <button class="btn ghost" id="aGo" type="button">התחבר</button>
     <button type="button" class="linkbtn" id="aForgot">שכחתי סיסמה</button>
-    <p class="note">בהרשמה אתה מאשר את <a href="#" data-doc="terms">תנאי השימוש</a> ו<a href="#" data-doc="privacy">מדיניות הפרטיות</a> (יפורסמו בשלב הבא).</p>`, (b) => {
-    let mode = 'in';
+    <p class="note">בהתחברות הראשונה נפתח לך חשבון אוטומטית. בהתחברות אתה מאשר את <a href="#" data-doc="terms">תנאי השימוש</a> ו<a href="#" data-doc="privacy">מדיניות הפרטיות</a>.</p>`, (b) => {
     const err = (m) => { const e = b.querySelector('#aErr'); e.hidden = !m; e.textContent = m || ''; };
-    b.querySelectorAll('.seg button').forEach(t => t.onclick = () => { mode = t.dataset.mode; b.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === t)); b.querySelector('#nameRow').hidden = mode === 'in'; b.querySelector('#aGo').textContent = mode === 'in' ? 'התחבר' : 'צור חשבון'; b.querySelector('#aPass').autocomplete = mode === 'in' ? 'current-password' : 'new-password'; err(''); });
     b.querySelector('#aGo').onclick = async () => {
-      const email = b.querySelector('#aEmail').value.trim(), pass = b.querySelector('#aPass').value, name = b.querySelector('#aName').value.trim();
+      const email = b.querySelector('#aEmail').value.trim(), pass = b.querySelector('#aPass').value;
       if (!email || !pass) return err('מלא אימייל וסיסמה');
+      if (pass.length < 6) return err('הסיסמה חייבת להכיל לפחות 6 תווים');
       b.querySelector('#aGo').disabled = true; err('');
-      try { if (mode === 'in') await signInEmail(email, pass); else await signUpEmail(email, pass, name); closeSheet(); }
+      try { const r = await signInOrRegister(email, pass); closeSheet(); if (r.created) toast('נפתח לך חשבון חדש — ברוך הבא'); }
       catch (e) { err(errorHe(e)); } finally { b.querySelector('#aGo').disabled = false; }
     };
     b.querySelector('#aGoogle').onclick = async () => { err(''); try { await signInGoogle(); closeSheet(); } catch (e) { err(errorHe(e)); } };
     b.querySelector('#aForgot').onclick = async () => {
-      const email = b.querySelector('#aEmail').value.trim(); if (!email) return err('כתוב את האימייל שלך למעלה ואז לחץ "שכחתי סיסמה"');
+      const email = b.querySelector('#aEmail').value.trim(); if (!email) return err('כתוב את האימייל שלך ואז לחץ "שכחתי סיסמה"');
       try { await resetPassword(email); err('שלחנו לך מייל לאיפוס הסיסמה'); } catch (e) { err(errorHe(e)); }
     };
   });
@@ -561,9 +564,12 @@ function openComplaint() {
   });
 }
 
+function openDoc(key) { openSheet(DOCS[key].title, `<div class="legal">${docHtml(key)}</div>`); }
+document.addEventListener('click', (e) => { const a = e.target.closest('a[data-doc]'); if (a) { e.preventDefault(); openDoc(a.dataset.doc); } });
+
 function openAbout() {
   openSheet('אודות', `<p>"מונה" מחשבת את המחיר המרבי החוקי של נסיעה במונית מיוחדת בישראל, לפי צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026 (ק"ת 12345), ולפי תקנות התעבורה.</p>
     <p class="note">החישוב הוא הערכה: המונה המכויל במונית הוא הקובע, ומדידת GPS יכולה לסטות בכמה אחוזים. התעריפים מתעדכנים כל 1 באפריל.</p>
     <p class="note">מקורות: <a href="https://www.gov.il/he/pages/taxi-rate-2026" target="_blank" rel="noopener">משרד התחבורה — תעריפי מוניות 2026</a> · <a href="https://he.wikisource.org/wiki/צו_פיקוח_על_מחירי_מצרכים_ושירותים_(מחירי_נסיעה_במוניות)" target="_blank" rel="noopener">נוסח הצו</a> · <a href="https://www.kolzchut.org.il/he/זכותון_נסיעה_במונית_מיוחדת_(ספיישל)" target="_blank" rel="noopener">כל-זכות</a></p>
-    <p class="note">גרסה 0.4 · לו קורק · lou.korek@gmail.com</p>`);
+    <p class="note">גרסה 0.8 · לו קורק · lou.korek@gmail.com · <a href="#" data-doc="terms">תנאי שימוש</a> · <a href="#" data-doc="privacy">פרטיות</a> · <a href="#" data-doc="accessibility">נגישות</a></p>`);
 }
