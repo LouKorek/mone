@@ -1,0 +1,32 @@
+{
+  "appId": "com.loukorek.mone",
+  "appName": "מונה",
+  "webDir": "dist",
+  "loggingBehavior": "none",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0f141d"
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0f141d"
+  },
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": ["google.com", "apple.com"]
+    },
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 600,
+      "backgroundColor": "#060d13",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0f141d",
+      "overlaysWebView": false
+    }
+  }
+}

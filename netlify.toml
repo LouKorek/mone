@@ -2,7 +2,26 @@
   command = "node build.mjs"
   publish = "dist"
 
+# Firebase Auth: מגישים את דף ה-handler מהדומיין שלנו (proxy שקוף ל-firebaseapp.com),
+# אחרת התחברות Google ב-redirect נכשלת בדפדפנים שחוסמים אחסון צד-שלישי (Chrome 115+, Safari, Firefox).
+[[redirects]]
+  from = "/__/auth/*"
+  to = "https://mone-taxi.firebaseapp.com/__/auth/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__/firebase/*"
+  to = "https://mone-taxi.firebaseapp.com/__/firebase/:splat"
+  status = 200
+  force = true
+
 [[headers]]
   for = "/*"
   [headers.values]
     Permissions-Policy = "geolocation=(self)"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

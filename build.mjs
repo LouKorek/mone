@@ -1,15 +1,20 @@
 // בונה גרסה בקובץ יחיד: dist/index.html (לפריסה) ו-dist/artifact.html (לתצוגה מקדימה ב-claude.ai)
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const tariffs = read('./src/data/tariffs.json');
 const hebcal = read('./src/hebcal.js').replace(/^export /gm, '');
 const engine = read('./src/engine.js').replace(/^import .*$/gm, '').replace(/^export /gm, '');
-const cloud = read('./src/cloud.js').replace(/^export /gm, '');
+const native = read('./src/native.js').replace(/^export /gm, '');
+const cloud = read('./src/cloud.js').replace(/^import .*$/gm, '').replace(/^export /gm, '');
 const legal = read('./src/legal.js').replace(/^export /gm, '');
 let app = read('./src/app.js').replace(/^import .*$/gm, '');
-const js = `const tariffs = ${tariffs.trim()};\n${hebcal}\n${engine}\n${cloud}\n${legal}\n${app}`;
 const css = read('./src/styles.css');
+// מזהה גרסה: hash של כל המקור — משתנה בכל שינוי, ומשמש את ה-Service Worker לרענון המטמון
+const BUILD = createHash('sha1').update(tariffs + hebcal + engine + native + cloud + legal + app + css + read('./index.html')).digest('hex').slice(0, 10);
+app = app.replace("'__BUILD__'", `'${BUILD}'`);
+const js = `const tariffs = ${tariffs.trim()};\n${hebcal}\n${engine}\n${native}\n${cloud}\n${legal}\n${app}`;
 
 let html = read('./index.html')
   .replace('<link rel="stylesheet" href="src/styles.css">', `<style>\n${css}\n</style>`)
@@ -17,11 +22,10 @@ let html = read('./index.html')
 
 mkdirSync(new URL('./dist/', import.meta.url), { recursive: true });
 writeFileSync(new URL('./dist/index.html', import.meta.url), html);
-for (const f of ['manifest.webmanifest', 'sw.js']) {
-  if (existsSync(new URL('./' + f, import.meta.url))) copyFileSync(new URL('./' + f, import.meta.url), new URL('./dist/' + f, import.meta.url));
-}
+copyFileSync(new URL('./manifest.webmanifest', import.meta.url), new URL('./dist/manifest.webmanifest', import.meta.url));
 mkdirSync(new URL('./dist/icons/', import.meta.url), { recursive: true });
-for (const f of readdirSync(new URL('./icons/', import.meta.url))) copyFileSync(new URL('./icons/' + f, import.meta.url), new URL('./dist/icons/' + f, import.meta.url));
+const icons = readdirSync(new URL('./icons/', import.meta.url));
+for (const f of icons) copyFileSync(new URL('./icons/' + f, import.meta.url), new URL('./dist/icons/' + f, import.meta.url));
 
 // גרסת artifact: בלי doctype/html/head/body, עם <title> ו-<style> בראש
 const inner = html.replace(/^[\s\S]*?<title>/, '<title>').replace('</title>', '</title>')
@@ -60,3 +64,9 @@ writeFileSync(new URL('./dist/legal/privacy.html', import.meta.url), page('priva
 writeFileSync(new URL('./dist/legal/accessibility.html', import.meta.url), page('accessibility', '../'));
 writeFileSync(new URL('./dist/delete-account.html', import.meta.url), page('delete', './'));
 console.log('built legal pages');
+
+// Service Worker: רשימת הקבצים לשמירה מראש + מזהה הגרסה
+const precache = ['/', '/manifest.webmanifest', ...icons.map(f => '/icons/' + f), '/legal/terms.html', '/legal/privacy.html', '/legal/accessibility.html', '/delete-account.html'];
+const sw = read('./src/sw.template.js').replace('__BUILD__', BUILD).replace('__PRECACHE__', JSON.stringify(precache));
+writeFileSync(new URL('./dist/sw.js', import.meta.url), sw);
+console.log('built sw.js (build ' + BUILD + ')');

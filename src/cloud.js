@@ -1,8 +1,12 @@
+import { isNative, nativeGoogleCredential, nativeAppleCredential, nativeSignOut } from './native.js';
 // חשבון וענן — Firebase Authentication + Cloud Firestore (פרויקט mone-taxi, נתונים ב-me-west1 תל אביב).
 // נטען דינמית מ-gstatic כדי שהאפליקציה תעבוד גם בלי רשת (בלי חשבון).
+// authDomain: באתר החי דף ההתחברות מוגש מהדומיין שלנו (proxy ב-netlify.toml) — כך redirect עובד גם
+// בדפדפנים שחוסמים אחסון צד-שלישי. בכל מקום אחר (פיתוח/תצוגה מקדימה) — הדומיין של Firebase.
+const OWN_DOMAINS = ['mone-taxi.netlify.app'];
 const FIREBASE_CONFIG = {
   apiKey: 'AIzaSyAZ_12dAEsw_-YfHG_0FDrF-ZXEzlrH2K8',
-  authDomain: 'mone-taxi.firebaseapp.com',
+  authDomain: OWN_DOMAINS.includes(location.hostname) ? location.hostname : 'mone-taxi.firebaseapp.com',
   projectId: 'mone-taxi',
   storageBucket: 'mone-taxi.firebasestorage.app',
   messagingSenderId: '1036744435942',
@@ -23,9 +27,12 @@ export async function initCloud() {
   await auth.setPersistence(authInst, auth.browserLocalPersistence).catch(() => {});
   fb = { auth: authInst, db: fs.getFirestore(a), A: auth, F: fs };
   auth.onAuthStateChanged(authInst, (u) => { currentUser = u; userListeners.forEach(f => f(u)); });
-  try { const r = await auth.getRedirectResult(authInst); if (r?.user) currentUser = r.user; } catch (e) { console.warn('redirect', e.code); }
+  try { const r = await auth.getRedirectResult(authInst); if (r?.user) { currentUser = r.user; fb.redirected = true; } }
+  catch (e) { console.warn('redirect', e.code); fb.redirectError = e; }
   return fb;
 }
+// האם הטעינה הנוכחית היא חזרה מהתחברות Google ב-redirect (כדי להראות אישור למשתמש)
+export const redirectOutcome = () => ({ user: fb?.redirected ? currentUser : null, error: fb?.redirectError || null });
 export const onUser = (f) => { userListeners.push(f); if (fb) f(currentUser); };
 export const getUser = () => currentUser;
 
@@ -54,13 +61,30 @@ export async function signInOrRegister(email, password) {
 export async function resetPassword(email) { const { A, auth } = await initCloud(); await A.sendPasswordResetEmail(auth, email); }
 export async function signInGoogle() {
   const { A, auth } = await initCloud();
+  if (isNative()) {   // אפליקציה מותקנת: חלון Google של המערכת, ואז כניסה ל-Firebase עם ה-token
+    const c = await nativeGoogleCredential();
+    return (await A.signInWithCredential(auth, A.GoogleAuthProvider.credential(c.idToken, c.accessToken || undefined))).user;
+  }
   const provider = new A.GoogleAuthProvider();
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   if (standalone) return A.signInWithRedirect(auth, provider);   // באפליקציה מותקנת חלון קופץ לא תמיד חוזר
   try { return (await A.signInWithPopup(auth, provider)).user; }
   catch (e) { if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') return A.signInWithRedirect(auth, provider); throw e; }
 }
-export async function signOut() { const { A, auth } = await initCloud(); await A.signOut(auth); }
+export async function signInApple() {
+  const { A, auth } = await initCloud();
+  const provider = new A.OAuthProvider('apple.com'); provider.addScope('email'); provider.addScope('name');
+  if (isNative()) {
+    const c = await nativeAppleCredential();
+    const cred = provider.credential({ idToken: c.idToken, rawNonce: c.nonce });
+    const u = (await A.signInWithCredential(auth, cred)).user;
+    if (c.displayName && !u.displayName) await A.updateProfile(u, { displayName: c.displayName }).catch(() => {});
+    return u;
+  }
+  try { return (await A.signInWithPopup(auth, provider)).user; }
+  catch (e) { if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') return A.signInWithRedirect(auth, provider); throw e; }
+}
+export async function signOut() { const { A, auth } = await initCloud(); await A.signOut(auth); if (isNative()) await nativeSignOut(); }
 
 // ---- נסיעות בענן: users/{uid}/rides/{id} ----
 export async function pushRides(rides) {
@@ -85,7 +109,14 @@ export async function deleteAccount(password) {
   const reauth = async () => {
     const pid = u.providerData[0]?.providerId;
     if (pid === 'password' && password) await A.reauthenticateWithCredential(u, A.EmailAuthProvider.credential(u.email, password));
-    else if (pid === 'google.com') await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
+    else if (pid === 'google.com') {
+      if (isNative()) { const c = await nativeGoogleCredential(); await A.reauthenticateWithCredential(u, A.GoogleAuthProvider.credential(c.idToken)); }
+      else await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
+    } else if (pid === 'apple.com') {
+      const p = new A.OAuthProvider('apple.com');
+      if (isNative()) { const c = await nativeAppleCredential(); await A.reauthenticateWithCredential(u, p.credential({ idToken: c.idToken, rawNonce: c.nonce })); }
+      else await A.reauthenticateWithPopup(u, p);
+    }
   };
   const wipe = async () => {
     const snap = await F.getDocs(F.collection(db, 'users', u.uid, 'rides'));
@@ -109,4 +140,6 @@ export const errorHe = (e) => ({
   'auth/network-request-failed': 'אין חיבור לאינטרנט',
   'auth/popup-closed-by-user': 'החלון נסגר לפני סיום ההתחברות',
   'auth/requires-recent-login': 'לביטחונך, התחבר מחדש ואז נסה שוב',
+  'auth/account-exists-with-different-credential': 'האימייל הזה כבר רשום בדרך התחברות אחרת',
+  'native/no-plugin': 'ההתחברות הזו לא זמינה בגרסה הזו',
 }[e?.code] || (e?.message ? 'שגיאה: ' + e.message : 'משהו השתבש, נסה שוב'));

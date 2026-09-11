@@ -1,1 +1,31 @@
-{ "name": "mone", "version": "0.1.0", "type": "module", "private": true, "scripts": { "test": "node tests/run.mjs" } }
+{
+  "name": "mone",
+  "version": "0.9.0",
+  "type": "module",
+  "private": true,
+  "description": "מונה — המחיר החוקי של נסיעה במונית בישראל",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/run.mjs",
+    "android:prepare": "node build.mjs && node native/prepare-android.mjs",
+    "assets": "capacitor-assets generate --android --ios --iconBackgroundColor '#060d13' --iconBackgroundColorDark '#060d13' --splashBackgroundColor '#060d13' --splashBackgroundColorDark '#060d13'"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/geolocation": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/share": "^8.0.0",
+    "@capacitor/splash-screen": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0",
+    "@capacitor-firebase/authentication": "^8.0.0",
+    "@capacitor-community/keep-awake": "^8.0.0",
+    "firebase": "^11.10.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.0.0"
+  }
+}

@@ -1,9 +1,11 @@
 import { loadTariffs, computeFare, tariffAt, activePeriod, getTariffs, TARIFF_NAMES, LiveMeter } from './engine.js';
 import tariffs from './data/tariffs.json' with { type: 'json' };
 import { DOCS, docHtml } from './legal.js';
-import { initCloud, onUser, getUser, signInOrRegister, resetPassword, signInGoogle, signOut, pushRides, pullRides, deleteRideCloud, deleteAccount, errorHe } from './cloud.js';
+import { initCloud, onUser, getUser, redirectOutcome, signInOrRegister, resetPassword, signInGoogle, signInApple, signOut, pushRides, pullRides, deleteRideCloud, deleteAccount, errorHe } from './cloud.js';
+import { isNative, platform, geoWatch, geoClear, keepAwake, shareImage, hasNativeApple, initNative } from './native.js';
 
 loadTariffs(tariffs);
+const BUILD = '__BUILD__';   // מוחלף בזמן הבנייה (build.mjs)
 
 const $ = (id) => document.getElementById(id);
 const nis = (n) => '₪ ' + Number(n).toFixed(2);
@@ -207,10 +209,9 @@ function onTimer() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify({ meter: live.meter.toJSON(), opts: live.opts, track: live.track })); } catch (e) { /* */ }
   renderMeter();
 }
-function startGps() {
-  if (!('geolocation' in navigator)) { $('meterGps').textContent = 'GPS לא נתמך'; return; }
+async function startGps() {
   $('meterGps').textContent = 'מחפש לוויינים…';
-  live.watchId = navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  live.watchId = await geoWatch(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
 }
 function onFix(pos) {
   const { latitude: lat, longitude: lon, accuracy, speed } = pos.coords; const t = pos.timestamp;
@@ -232,13 +233,13 @@ function onFix(pos) {
   live.lastFix = { lat, lon, t, acc: accuracy };
   renderMeter();
 }
-function onGpsError(err) { $('meterGps').textContent = err.code === 1 ? 'אין הרשאת מיקום' : 'אין קליטת GPS'; }
+function onGpsError(err) { $('meterGps').textContent = err.code === 1 ? 'אין הרשאת מיקום' : err.message === 'unsupported' ? 'GPS לא נתמך' : 'אין קליטת GPS'; }
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000, r = (x) => x * Math.PI / 180;
   const a = Math.sin(r(lat2 - lat1) / 2) ** 2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(r(lon2 - lon1) / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
-async function requestWakeLock() { try { live.wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* */ } }
+async function requestWakeLock() { if (await keepAwake(true)) return; try { live.wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* */ } }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && live.timer) requestWakeLock(); });
 
 function renderMeter() {
@@ -260,8 +261,8 @@ function renderMeter() {
 }
 function stopRide() {
   clearInterval(live.timer); live.timer = null;
-  if (live.watchId != null) navigator.geolocation.clearWatch(live.watchId);
-  live.wakeLock?.release?.(); live.wakeLock = null;
+  geoClear(live.watchId); live.watchId = null;
+  live.wakeLock?.release?.(); live.wakeLock = null; keepAwake(false);
   try { localStorage.removeItem(STORE_KEY); } catch (e) { /* */ }
   $('livePrice').classList.remove('running'); $('liveStop').hidden = true; $('meterGps').textContent = 'GPS כבוי';
   mapFinish(live.track);
@@ -276,6 +277,7 @@ function resetRide() {
   mapReset(); if (gmap.map) { gmap.map.remove(); gmap.map = null; $('mapEmpty').hidden = false; }
   $('liveStart').hidden = false; $('mapEmpty').textContent = 'המפה תופיע כאן בזמן הנסיעה';
   renderMeter();
+  applyPendingReload();
 }
 (function restore() {
   try {
@@ -388,6 +390,7 @@ async function shareReceipt(ride, btn) {
   const file = new File([blob], `mone-${ride.id}.png`, { type: 'image/png' });
   const text = `קבלת נסיעה מ"מונה": ${ride.km.toFixed(1)} ק"מ, ${Math.round(ride.minutes)} דק', ${ride.tariffLabel} — ${nis(ride.total)} (מחיר מרבי לפי הצו).`;
   try {
+    if (await shareImage(blob, file.name, 'קבלת נסיעה — מונה', text)) return;
     if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'קבלת נסיעה — מונה', text }); return; }
     if (navigator.share) { await navigator.share({ title: 'קבלת נסיעה — מונה', text: text + ' ' + APP_URL }); return; }
   } catch (e) { if (e.name === 'AbortError') return; }
@@ -416,11 +419,15 @@ document.querySelectorAll('#view-more [data-sheet]').forEach(b => b.addEventList
 // ============ חשבון (Firebase) ============
 let cloudReady = false;
 function accountLabel(u) { return u ? (u.displayName || u.email || 'מחובר') : 'התחברות'; }
+function firstName(u) { return (u.displayName || u.email || '').split(/[\s@]/)[0] || ''; }
 function renderAccountRow() {
   const u = getUser();
-  $('accountLabel').textContent = accountLabel(u);
-  $('accountSub').textContent = u ? 'הנסיעות מסונכרנות בענן' : 'שמור נסיעות בענן וגש אליהן מכל מכשיר';
+  $('accountLabel').textContent = u ? `שלום, ${firstName(u)}` : 'התחברות';
+  $('accountSub').textContent = u ? `מחובר · ${u.email || accountLabel(u)} · הנסיעות מסונכרנות` : 'שמור נסיעות בענן וגש אליהן מכל מכשיר';
+  const img = $('accountImg'); img.src = u?.photoURL || 'icons/logo-96.png'; img.classList.toggle('avatar', !!u?.photoURL);
+  document.querySelector('#view-more .account').classList.toggle('on', !!u);
 }
+function greet(u) { toast(`שלום, ${firstName(u) || 'ברוך הבא'} — התחברת בהצלחה`); }
 async function syncRides() {
   try {
     const local = loadRides();
@@ -437,6 +444,9 @@ async function syncRides() {
 initCloud().then(() => {
   cloudReady = true;
   onUser((u) => { renderAccountRow(); if (u) syncRides(); });
+  const r = redirectOutcome();          // חזרה מהתחברות Google (אפליקציה מותקנת)
+  if (r.user) { greet(r.user); showView('more'); }
+  else if (r.error) { showView('more'); openSheet('ההתחברות לא הושלמה', `<p class="err">${esc(errorHe(r.error))}</p><p class="note">נסה שוב, או התחבר באימייל.</p>`); }
 }).catch(() => { $('accountSub').textContent = 'אין חיבור לאינטרנט — הנסיעות נשמרות במכשיר'; });
 
 function openAccount() {
@@ -445,6 +455,7 @@ function openAccount() {
   if (u) return openProfile(u);
   openSheet('התחברות', `
     <button class="btn" id="aGoogle" type="button"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10c.8-2.3 3-4 5.6-4z"/></svg> המשך עם Google</button>
+    ${hasNativeApple() ? '<button class="btn apple" id="aApple" type="button"> המשך עם Apple</button>' : ''}
     <div class="or"><span>או באימייל</span></div>
     <label class="field"><span>אימייל</span><input id="aEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" dir="ltr"></label>
     <label class="field"><span>סיסמה</span><input id="aPass" type="password" autocomplete="current-password" placeholder="6 תווים לפחות" dir="ltr"></label>
@@ -458,10 +469,17 @@ function openAccount() {
       if (!email || !pass) return err('מלא אימייל וסיסמה');
       if (pass.length < 6) return err('הסיסמה חייבת להכיל לפחות 6 תווים');
       b.querySelector('#aGo').disabled = true; err('');
-      try { const r = await signInOrRegister(email, pass); closeSheet(); if (r.created) toast('נפתח לך חשבון חדש — ברוך הבא'); }
+      try { const r = await signInOrRegister(email, pass); renderAccountRow(); openProfile(r.user); toast(r.created ? 'נפתח לך חשבון חדש — ברוך הבא' : `שלום, ${firstName(r.user)} — התחברת בהצלחה`); }
       catch (e) { err(errorHe(e)); } finally { b.querySelector('#aGo').disabled = false; }
     };
-    b.querySelector('#aGoogle').onclick = async () => { err(''); try { await signInGoogle(); closeSheet(); } catch (e) { err(errorHe(e)); } };
+    b.querySelector('#aGoogle').onclick = async () => {
+      err(''); b.querySelector('#aGoogle').disabled = true;
+      try { const u = await signInGoogle(); if (u) { renderAccountRow(); openProfile(u); greet(u); } else toast('עוברים ל-Google להתחברות…'); }
+      catch (e) { err(errorHe(e)); } finally { b.querySelector('#aGoogle').disabled = false; }
+    };
+    b.querySelector('#aApple') && (b.querySelector('#aApple').onclick = async () => {
+      err(''); try { const u = await signInApple(); if (u) { renderAccountRow(); openProfile(u); greet(u); } } catch (e) { err(errorHe(e)); }
+    });
     b.querySelector('#aForgot').onclick = async () => {
       const email = b.querySelector('#aEmail').value.trim(); if (!email) return err('כתוב את האימייל שלך ואז לחץ "שכחתי סיסמה"');
       try { await resetPassword(email); err('שלחנו לך מייל לאיפוס הסיסמה'); } catch (e) { err(errorHe(e)); }
@@ -471,7 +489,7 @@ function openAccount() {
 function openProfile(u) {
   const pid = u.providerData[0]?.providerId;
   openSheet('החשבון שלי', `
-    <dl class="kv"><dt>שם</dt><dd>${esc(u.displayName || '—')}</dd><dt>אימייל</dt><dd>${esc(u.email || '—')}</dd><dt>התחברות</dt><dd>${pid === 'google.com' ? 'Google' : 'אימייל וסיסמה'}</dd><dt>נסיעות בענן</dt><dd>${loadRides().length}</dd></dl>
+    <dl class="kv"><dt>שם</dt><dd>${esc(u.displayName || '—')}</dd><dt>אימייל</dt><dd>${esc(u.email || '—')}</dd><dt>התחברות</dt><dd>${pid === 'google.com' ? 'Google' : pid === 'apple.com' ? 'Apple' : 'אימייל וסיסמה'}</dd><dt>נסיעות בענן</dt><dd>${loadRides().length}</dd></dl>
     <p class="note">הנסיעות שלך נשמרות ב-Firebase (שרתי Google בתל אביב) ומסונכרנות לכל מכשיר שבו תתחבר.</p>
     <div class="actions"><button class="btn ghost" id="pOut" type="button">התנתק</button><button class="btn ghost danger" id="pDel" type="button">מחק חשבון</button></div>`, (b) => {
     b.querySelector('#pOut').onclick = async () => { await signOut(); closeSheet(); renderAccountRow(); };
@@ -571,5 +589,57 @@ function openAbout() {
   openSheet('אודות', `<p>"מונה" מחשבת את המחיר המרבי החוקי של נסיעה במונית מיוחדת בישראל, לפי צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026 (ק"ת 12345), ולפי תקנות התעבורה.</p>
     <p class="note">החישוב הוא הערכה: המונה המכויל במונית הוא הקובע, ומדידת GPS יכולה לסטות בכמה אחוזים. התעריפים מתעדכנים כל 1 באפריל.</p>
     <p class="note">מקורות: <a href="https://www.gov.il/he/pages/taxi-rate-2026" target="_blank" rel="noopener">משרד התחבורה — תעריפי מוניות 2026</a> · <a href="https://he.wikisource.org/wiki/צו_פיקוח_על_מחירי_מצרכים_ושירותים_(מחירי_נסיעה_במוניות)" target="_blank" rel="noopener">נוסח הצו</a> · <a href="https://www.kolzchut.org.il/he/זכותון_נסיעה_במונית_מיוחדת_(ספיישל)" target="_blank" rel="noopener">כל-זכות</a></p>
-    <p class="note">גרסה 0.8 · לו קורק · lou.korek@gmail.com · <a href="#" data-doc="terms">תנאי שימוש</a> · <a href="#" data-doc="privacy">פרטיות</a> · <a href="#" data-doc="accessibility">נגישות</a></p>`);
+    <p class="note">גרסה 0.9 (${BUILD === '__BUILD__' ? 'dev' : BUILD}) · לו קורק · lou.korek@gmail.com · <a href="#" data-doc="terms">תנאי שימוש</a> · <a href="#" data-doc="privacy">פרטיות</a> · <a href="#" data-doc="accessibility">נגישות</a></p>
+    <div class="actions"><button class="btn ghost" id="chkUpd" type="button">בדוק עדכון</button></div>`, (b) => {
+    b.querySelector('#chkUpd').onclick = async () => {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      if (!reg) return toast('האפליקציה רצה ללא מטמון (דפדפן ישן או תצוגה מקדימה)');
+      await reg.update(); toast(reg.installing || reg.waiting ? 'נמצא עדכון — מתקין…' : 'זו הגרסה העדכנית');
+    };
+  });
 }
+
+// ============ PWA: עבודה בלי אינטרנט, עדכונים והתקנה ============
+const pwa = { reloadPending: false, installEvt: null };
+if (!isNative() && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('/sw.js').then((reg) => {
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) toast('הורדה גרסה חדשה של מונה'); });
+    });
+  }).catch((e) => console.warn('sw', e));
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return; }       // התקנה ראשונה — אין מה לרענן
+    if (live.timer) { pwa.reloadPending = true; return; }         // באמצע נסיעה לא מרעננים; נרענן אחרי הסיום
+    location.reload();
+  });
+}
+function applyPendingReload() { if (pwa.reloadPending) { pwa.reloadPending = false; setTimeout(() => location.reload(), 1500); } }
+
+// התקנה במסך הבית
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); pwa.installEvt = e; renderInstallRow(); });
+window.addEventListener('appinstalled', () => { pwa.installEvt = null; renderInstallRow(); toast('מונה הותקנה במסך הבית'); });
+function renderInstallRow() {
+  const row = $('installRow'); if (!row) return;
+  row.hidden = isNative() || isStandalone() || !(pwa.installEvt || isIOS);
+}
+$('installRow')?.addEventListener('click', async () => {
+  if (pwa.installEvt) { pwa.installEvt.prompt(); const r = await pwa.installEvt.userChoice; if (r.outcome === 'accepted') pwa.installEvt = null; renderInstallRow(); return; }
+  openSheet('התקנה במסך הבית', `<p>ב-iPhone: לחץ על כפתור השיתוף <b>⎙</b> בסרגל של Safari, גלול ובחר <b>"הוסף למסך הבית"</b>, ואז <b>"הוסף"</b>.</p><p class="note">אחרי ההתקנה מונה נפתחת כמו אפליקציה רגילה, במסך מלא וגם בלי אינטרנט.</p>`);
+});
+renderInstallRow();
+
+// מצב רשת
+function renderOnline() {
+  document.body.classList.toggle('offline', !navigator.onLine);
+  if (!getUser()) $('accountSub').textContent = navigator.onLine ? 'שמור נסיעות בענן וגש אליהן מכל מכשיר' : 'אין אינטרנט — הנסיעות נשמרות במכשיר ויסונכרנו אחר כך';
+}
+window.addEventListener('online', () => { renderOnline(); if (getUser()) syncRides(); });
+window.addEventListener('offline', renderOnline);
+renderOnline();
+
+// ============ אפליקציה מותקנת (Android/iOS) ============
+initNative({ onBack: () => { if (!sheet.hidden) { closeSheet(); return true; } const cur = document.querySelector('.tabbar [aria-selected="true"]')?.dataset.view; if (cur && cur !== 'calc') { showView('calc'); return true; } return false; } });

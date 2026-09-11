@@ -1,0 +1,82 @@
+# בונה את אפליקציית Android של "מונה" בענן (בלי Android Studio במחשב).
+# תוצרים: mone-debug.apk (להתקנה ישירה בטלפון לבדיקה) ו-mone-release.aab (להעלאה ל-Google Play).
+# חתימה: אם קיימים ה-Secrets (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD)
+# שתי הגרסאות נחתמות במפתח ההעלאה; אחרת ה-AAB לא חתום וה-APK חתום במפתח debug זמני.
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'plan.html', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Test
+        run: npm test
+        env:
+          TZ: Asia/Jerusalem
+
+      - name: Build web
+        run: node build.mjs
+
+      - name: Create Android project
+        run: npx cap add android
+
+      - name: Prepare Android project
+        run: node native/prepare-android.mjs
+        env:
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Icons and splash
+        run: npx capacitor-assets generate --android --iconBackgroundColor '#060d13' --iconBackgroundColorDark '#060d13' --splashBackgroundColor '#060d13' --splashBackgroundColorDark '#060d13'
+
+      - name: Sync plugins
+        run: npx cap sync android
+
+      - name: Gradle build
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug bundleRelease --no-daemon --stacktrace
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Collect outputs
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/mone-debug.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab out/mone-release.aab
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mone-android-${{ github.run_number }}
+          path: out/
+          retention-days: 30

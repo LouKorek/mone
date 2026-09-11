@@ -29,6 +29,7 @@
   <symbol id="i-meter" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9v1h4l-1-1a6 6 0 1 1 12 0l-1 1h4v-1a9 9 0 0 0-9-9zm-1 9l4-5 1 1-3 5a1.5 1.5 0 1 1-2-1zM5 15h14v2H5z"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 6h16v2H4zm0 6h10v2H4z"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M11 3h2v9.2l3-3 1.4 1.4L12 16l-5.4-5.4L8 9.2l3 3zM4 18h16v2H4z"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8 1.5-1.5L10 12l6.5-6.5z"/></symbol>
 </svg>
 
@@ -83,7 +84,8 @@
     <!-- ================= עוד ================= -->
     <section class="view" id="view-more" hidden>
       <div class="list menu">
-        <button type="button" data-sheet="account" class="account"><img src="icons/logo-96.png" alt="" width="28" height="28"><span><b id="accountLabel">התחברות</b><small id="accountSub">שמור נסיעות בענן וגש אליהן מכל מכשיר</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
+        <button type="button" data-sheet="account" class="account"><img id="accountImg" src="icons/logo-96.png" alt="" width="28" height="28" referrerpolicy="no-referrer"><span><b id="accountLabel">התחברות</b><small id="accountSub">שמור נסיעות בענן וגש אליהן מכל מכשיר</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
+        <button type="button" id="installRow" hidden><svg><use href="#i-download"/></svg><span>התקן את מונה במסך הבית</span><svg class="chev"><use href="#i-chev"/></svg></button>
         <button type="button" data-sheet="tariffs"><svg><use href="#i-list"/></svg><span>התעריפים הנוכחיים</span><svg class="chev"><use href="#i-chev"/></svg></button>
         <button type="button" data-sheet="rights"><svg><use href="#i-info"/></svg><span>ידעת? זכויות הנוסע</span><svg class="chev"><use href="#i-chev"/></svg></button>
         <button type="button" data-sheet="complaint"><svg><use href="#i-phone"/></svg><span>הגשת תלונה על נהג</span><svg class="chev"><use href="#i-chev"/></svg></button>
