@@ -1,228 +1,329 @@
-import { loadTariffs, computeFare, tariffAt, activePeriod, TARIFF_NAMES, LiveMeter } from './engine.js';
+import { loadTariffs, computeFare, tariffAt, activePeriod, getTariffs, TARIFF_NAMES, LiveMeter } from './engine.js';
 import tariffs from './data/tariffs.json' with { type: 'json' };
 
 loadTariffs(tariffs);
 
 const $ = (id) => document.getElementById(id);
-const nis = (n) => '₪ ' + n.toFixed(2);
+const nis = (n) => '₪ ' + Number(n).toFixed(2);
+const VAT = 1 + tariffs.vat;
+const tariffHe = (t) => ({ A: "א'", B: "ב'", C: "ג'" })[t];
+const pad2 = (n) => String(n).padStart(2, '0');
+const fmtDate = (iso) => { const [y, m, d] = iso.split('-'); return `${Number(d)}.${Number(m)}.${y}`; };
+const fmtDT = (d) => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// ---------- ניווט בין מסכים ----------
-const SUBTITLES = { calc: 'מחשבון', live: 'מונה חי', info: 'תעריפים וזכויות' };
-document.querySelectorAll('.tabbar [role=tab]').forEach(tab => {
-  tab.addEventListener('click', () => showView(tab.dataset.view));
-});
+// ============ ניווט ============
+const SUBTITLES = { calc: 'מחשבון', live: 'מונה חי', rides: 'נסיעות', more: 'עוד' };
+document.querySelectorAll('.tabbar [role=tab]').forEach(tab => tab.addEventListener('click', () => showView(tab.dataset.view)));
 function showView(name) {
   document.querySelectorAll('.tabbar [role=tab]').forEach(t => t.setAttribute('aria-selected', String(t.dataset.view === name)));
   document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + name; });
   $('topSub').textContent = SUBTITLES[name];
+  if (name === 'rides') renderRides();
 }
 
-// ---------- מצב המחשבון ----------
-const state = { order: false, airport: null, road6: false, segment18: false, carmel: 0, eilat: false };
-
-function toLocalInputValue(d) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+// ============ גיליון תחתון ============
+const sheet = $('sheet'), backdrop = $('sheetBackdrop');
+let onSheetClose = null;
+function openSheet(title, html, after) {
+  $('sheetTitle').textContent = title; $('sheetBody').innerHTML = html;
+  sheet.hidden = false; backdrop.hidden = false;
+  if (after) after($('sheetBody'));
+  $('sheetClose').focus();
 }
-function startDate() {
-  const v = $('when').value;
-  return v ? new Date(v) : new Date();
-}
-function setNow() { $('when').value = toLocalInputValue(new Date()); recalc(); }
-$('nowBtn').addEventListener('click', setNow);
+function closeSheet() { sheet.hidden = true; backdrop.hidden = true; if (onSheetClose) { const f = onSheetClose; onSheetClose = null; f(); } }
+$('sheetClose').addEventListener('click', closeSheet);
+backdrop.addEventListener('click', closeSheet);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
 
-// צ'יפים: הזמנה/כביש/אילת הם מתגים; נמל תעופה ומנהרות הכרמל הם בחירה אחת מתוך כמה.
-$('chips').addEventListener('click', (e) => {
-  const chip = e.target.closest('.chip'); if (!chip) return;
-  const opt = chip.dataset.opt, val = chip.dataset.value;
-  if (opt === 'airport') state.airport = state.airport === val ? null : val;
-  else if (opt === 'carmel') state.carmel = state.carmel === Number(val) ? 0 : Number(val);
-  else state[opt] = !state[opt];
-  syncChips(); recalc();
-});
-function syncChips() {
-  document.querySelectorAll('#chips .chip').forEach(c => {
-    const opt = c.dataset.opt, val = c.dataset.value;
-    const on = opt === 'airport' ? state.airport === val : opt === 'carmel' ? state.carmel === Number(val) : !!state[opt];
-    c.setAttribute('aria-pressed', String(on));
+// ============ אריחי תוספות (משותף למחשבון ולמונה החי) ============
+const T = getTariffs();
+const sur = (x) => nis(x * VAT);
+const TILES = [
+  { key: 'order', icon: 'phone', label: 'הזמנה', price: (p) => sur(p.order_surcharge), on: (o) => o.order, tap: (o) => { o.order = !o.order; } },
+  { key: 'airport', icon: 'plane', label: (o) => o.airport === 'ramon' ? 'מרמון/חיפה' : 'מנתב"ג',
+    price: (p, o) => o.airport === 'ramon' ? sur(T.surcharges.ramon_or_haifa_airport) : sur(T.surcharges.ben_gurion),
+    on: (o) => !!o.airport, tap: (o) => { o.airport = o.airport === null ? 'ben-gurion' : o.airport === 'ben-gurion' ? 'ramon' : null; } },
+  { key: 'road6', icon: 'road', label: 'כביש 6', price: () => sur(T.surcharges.road6_main), on: (o) => o.road6, tap: (o) => { o.road6 = !o.road6; } },
+  { key: 'segment18', icon: 'road', label: 'קטע 18', price: () => sur(T.surcharges.road6_segment18), on: (o) => o.segment18, tap: (o) => { o.segment18 = !o.segment18; } },
+  { key: 'carmel', icon: 'tunnel', label: (o) => o.carmel === 2 ? 'כרמל · 2 קטעים' : 'מנהרות הכרמל',
+    price: (p, o) => sur(o.carmel === 2 ? T.surcharges.carmel_tunnels_two : T.surcharges.carmel_tunnels_one),
+    on: (o) => o.carmel > 0, tap: (o) => { o.carmel = (o.carmel + 1) % 3; } },
+  { key: 'fastLane', icon: 'bolt', label: 'נתיב מהיר', price: (p, o) => o.fastLane > 0 ? nis(o.fastLane) : 'לפי השלט', on: (o) => o.fastLane > 0, tap: 'fastLane' },
+  { key: 'eilat', icon: 'palm', label: 'אילת', price: () => 'ללא מע"מ', on: (o) => o.eilat, tap: (o) => { o.eilat = !o.eilat; } },
+  { key: 'info', icon: 'info', label: 'ידעת?', price: () => 'זכויות', on: () => false, tap: 'info', cls: 'info' },
+];
+const newOpts = () => ({ order: false, airport: null, road6: false, segment18: false, carmel: 0, eilat: false, fastLane: 0 });
+
+function renderTiles(container, opts, period, onChange) {
+  container.innerHTML = TILES.map(t => {
+    const label = typeof t.label === 'function' ? t.label(opts) : t.label;
+    return `<button type="button" class="tile ${t.cls || ''}" data-key="${t.key}" aria-pressed="${t.on(opts)}"><svg><use href="#i-${t.icon}"/></svg>${label}<small>${t.price(period, opts)}</small></button>`;
+  }).join('');
+  container.onclick = (e) => {
+    const btn = e.target.closest('.tile'); if (!btn) return;
+    const t = TILES.find(x => x.key === btn.dataset.key);
+    if (t.tap === 'info') return openRights();
+    if (t.tap === 'fastLane') return askFastLane(opts, () => { renderTiles(container, opts, period, onChange); onChange(); });
+    t.tap(opts); renderTiles(container, opts, period, onChange); onChange();
+  };
+}
+function askFastLane(opts, done) {
+  openSheet('נתיב מהיר', `<p class="note">האגרה בנתיב המהיר משתנה לפי העומס ומוצגת על השלט האלקטרוני בכניסה. הנוסע משלם את הסכום שהוצג (ללא מע"מ נוסף).</p>
+    <label class="field"><span>סכום</span><input id="flAmount" type="number" inputmode="decimal" min="0" step="0.5" value="${opts.fastLane || ''}" placeholder="₪"></label>
+    <div class="actions"><button class="btn" id="flOk" type="button">אישור</button><button class="btn ghost" id="flClear" type="button">בלי נתיב מהיר</button></div>`, (b) => {
+    b.querySelector('#flAmount').focus();
+    b.querySelector('#flOk').onclick = () => { opts.fastLane = Number(b.querySelector('#flAmount').value) || 0; closeSheet(); done(); };
+    b.querySelector('#flClear').onclick = () => { opts.fastLane = 0; closeSheet(); done(); };
   });
 }
 
-['km', 'minutes', 'when', 'fastLane', 'asked'].forEach(id => $(id).addEventListener('input', recalc));
+// ============ פירוט משותף ============
+function breakdownHtml(fare) {
+  return `<div class="breakdown">${fare.lines.map(l => `<div><span>${esc(l.label)}</span><span>${l.amount.toFixed(2)}</span></div>`).join('')}
+    <div class="total"><span>סה"כ · ${esc(fare.tariffLabel)}</span><span>${nis(fare.total)}</span></div></div>
+    <p class="note">${esc(fare.dayLabel)} · במזומן מעגלים ל-${nis(fare.cashTotal)} · ${fare.period === 'קבוע' ? 'הסט הקבוע של הצו' : 'הוראת השעה בצו'} · כולל מע"מ ${Math.round(T.vat * 100)}%</p>`;
+}
+function diffHtml(asked, total) {
+  if (!(asked > 0)) return '';
+  const gap = asked - total;
+  if (gap > 0.5) return `<div class="diff over"><b>הנהג ביקש ${nis(gap)} מעל המחיר המרבי.</b> אסור לגבות יותר ממה שהמונה מראה (תקנה 512). בקש קבלה מודפסת מהמונה, וצלם את מספר הרישיון על גג המונית. <button type="button" data-open="complaint">איך מתלוננים ›</button></div>`;
+  return `<div class="diff ok"><b>המחיר תקין</b> — ${gap < -0.5 ? nis(-gap) + ' מתחת למחיר המרבי.' : 'בדיוק לפי הצו.'}</div>`;
+}
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-open="complaint"]'); if (b) { closeSheet(); openComplaint(); } });
+
+// ============ מחשבון ============
+const calc = { opts: newOpts(), fare: null };
+function toLocalInputValue(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+const startDate = () => $('when').value ? new Date($('when').value) : new Date();
+$('nowBtn').addEventListener('click', () => { $('when').value = toLocalInputValue(new Date()); recalc(); });
+['km', 'minutes', 'when', 'asked'].forEach(id => $(id).addEventListener('input', recalc));
+$('calcPrice').addEventListener('click', () => { if (calc.fare) openSheet('פירוט המחיר', breakdownHtml(calc.fare) + diffHtml(Number($('asked').value), calc.fare.total)); });
 
 function recalc() {
   const start = startDate();
   const info = tariffAt(start);
-  $('tarifLine').innerHTML = `תעריף שחל: <b>${info.tariff === 'A' ? "א'" : info.tariff === 'B' ? "ב'" : "ג'"}</b> ${info.label}`;
   const period = activePeriod(start);
-  $('periodNote').textContent = `לפי צו הפיקוח על מחירי נסיעה במוניות, ${period.name === 'קבוע' ? 'הסט הקבוע' : 'הוראת השעה'} (${fmtDate(period.valid_from)}${period.valid_to ? '–' + fmtDate(period.valid_to) : ' ואילך'}). המחירים כוללים מע"מ 18%.`;
-
-  const km = Number($('km').value), minutes = Number($('minutes').value);
-  if (!(km > 0) && !(minutes > 0)) { $('result').hidden = true; return; }
-
-  const fare = computeFare({ start, km, minutes, fastLane: Number($('fastLane').value) || 0, ...state });
-  $('result').hidden = false;
-  renderResult('calc', fare);
-
-  renderDiff($('diff'), Number($('asked').value), fare.total);
-}
-function renderDiff(el, asked, total) {
-  if (!(asked > 0)) { el.hidden = true; return; }
-  const gap = asked - total;
-  el.hidden = false;
-  if (gap > 0.5) {
-    el.className = 'diff over';
-    el.innerHTML = `<b>פער של ${nis(gap)} מעל המחיר המרבי.</b><small>הנהג חייב להפעיל מונה ולתת קבלה מודפסת לבקשתך. אפשר להתלונן במוקד משרד התחבורה *5678.</small>`;
-  } else {
-    el.className = 'diff ok';
-    el.innerHTML = `<b>המחיר תקין</b> — ${gap < -0.5 ? 'אפילו ' + nis(-gap) + ' מתחת למחיר המרבי.' : 'בדיוק לפי הצו.'}`;
+  $('calcTariff').textContent = tariffHe(info.tariff);
+  $('calcTariff').title = `${TARIFF_NAMES[info.tariff]} · ${info.label}`;
+  renderTiles($('calcTiles'), calc.opts, period, recalcOnly);
+  recalcOnly();
+  function recalcOnly() {
+    const km = Number($('km').value), minutes = Number($('minutes').value);
+    const fare = computeFare({ start, km, minutes, ...calc.opts });
+    calc.fare = (km > 0 || minutes > 0) ? fare : null;
+    $('calcTotal').textContent = nis(fare.total);
+    $('calcSub').textContent = calc.fare ? `${fare.tariffLabel} · ${fare.dayLabel} · לפירוט ↑` : `${TARIFF_NAMES[info.tariff]} · ${info.label} · הזן מרחק ודקות`;
+    const d = $('calcDiff'); const html = calc.fare ? diffHtml(Number($('asked').value), fare.total) : '';
+    d.hidden = !html; d.innerHTML = html;
   }
 }
-function renderResult(prefix, fare) {
-  $(prefix + 'Total').textContent = nis(fare.total);
-  $(prefix + 'CashNote').textContent = `${fare.tariffLabel} · ${fare.dayLabel} · במזומן מעגלים ל-${nis(fare.cashTotal)}`;
-  $(prefix + 'Breakdown').innerHTML = fare.lines.map(l => `<div class="${l.key}"><span>${l.label}</span><span>${l.amount.toFixed(2)}</span></div>`).join('');
-}
-function fmtDate(iso) { const [y, m, d] = iso.split('-'); return `${Number(d)}.${Number(m)}.${y}`; }
+$('when').value = toLocalInputValue(new Date());
+recalc();
 
-setNow();
-
-// ======================= מונה חי =======================
-const live = { meter: null, watchId: null, timer: null, lastFix: null, lastTickAt: null, wakeLock: null, speed: null, opts: { order: false, airport: null, road6: false, segment18: false, carmel: 0, eilat: false, fastLane: 0 } };
+// ============ מונה חי ============
+const live = { meter: null, watchId: null, timer: null, lastFix: null, lastTickAt: null, wakeLock: null, speed: null, opts: newOpts(), track: [] };
 const STORE_KEY = 'mone.liveRide';
-const pad2 = (n) => String(n).padStart(2, '0');
-const tariffHe = (t) => ({ A: "א'", B: "ב'", C: "ג'" })[t];
-
-$('liveChips').addEventListener('click', (e) => {
-  const chip = e.target.closest('.chip'); if (!chip) return;
-  const opt = chip.dataset.opt, val = chip.dataset.value, o = live.opts;
-  if (opt === 'airport') o.airport = o.airport === val ? null : val;
-  else if (opt === 'carmel') o.carmel = o.carmel === Number(val) ? 0 : Number(val);
-  else o[opt] = !o[opt];
-  if (live.meter) Object.assign(live.meter.opts, o);
-  syncLiveChips(); renderMeter();
-});
-$('liveFastLane').addEventListener('input', () => { live.opts.fastLane = Number($('liveFastLane').value) || 0; if (live.meter) live.meter.opts.fastLane = live.opts.fastLane; renderMeter(); });
-function syncLiveChips() {
-  document.querySelectorAll('#liveChips .chip').forEach(c => {
-    const opt = c.dataset.opt, val = c.dataset.value, o = live.opts;
-    const on = opt === 'airport' ? o.airport === val : opt === 'carmel' ? o.carmel === Number(val) : !!o[opt];
-    c.setAttribute('aria-pressed', String(on));
-  });
-}
-
-$('liveStart').addEventListener('click', startRide);
+renderTiles($('liveTiles'), live.opts, activePeriod(new Date()), () => { if (live.meter) Object.assign(live.meter.opts, live.opts); renderMeter(); });
+$('liveStart').addEventListener('click', () => startRide(false));
 $('liveStop').addEventListener('click', stopRide);
-$('liveReset').addEventListener('click', resetRide);
-$('liveAsked').addEventListener('input', () => { if (live.meter) renderDiff($('liveDiff'), Number($('liveAsked').value), live.meter.snapshot().total); });
 
 function startRide(resumed) {
-  if (!live.meter) live.meter = new LiveMeter(new Date(), live.opts);
+  if (!live.meter) { live.meter = new LiveMeter(new Date(), live.opts); live.track = []; }
   live.lastTickAt = Date.now(); live.lastFix = null; live.speed = null;
-  $('liveStart').hidden = true; $('liveStop').hidden = false; $('liveResult').hidden = true;
-  $('liveHint').textContent = resumed === true ? 'הנסיעה שוחזרה מהזיכרון וממשיכה.' : 'הנסיעה התחילה. השאר את האפליקציה פתוחה עד סוף הנסיעה.';
-  $('meter').classList.add('running');
+  $('liveStart').hidden = true; $('liveStop').hidden = false;
+  $('livePrice').classList.add('running');
+  $('mapEmpty').textContent = resumed ? 'הנסיעה שוחזרה מהזיכרון וממשיכה' : 'המפה תופיע כאן בזמן הנסיעה';
   live.timer = setInterval(onTimer, 1000);
   startGps(); requestWakeLock(); renderMeter();
 }
 function onTimer() {
   const now = Date.now();
-  const dSec = (now - live.lastTickAt) / 1000;   // גם אם הדפדפן "נרדם" לרגע, הזמן לא הולך לאיבוד
+  live.meter.tick(new Date(now), (now - live.lastTickAt) / 1000, 0);
   live.lastTickAt = now;
-  live.meter.tick(new Date(now), dSec, 0);
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ meter: live.meter.toJSON(), opts: live.opts })); } catch (e) { /* אין אחסון – ממשיכים */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ meter: live.meter.toJSON(), opts: live.opts, track: live.track })); } catch (e) { /* */ }
   renderMeter();
 }
 function startGps() {
-  if (!('geolocation' in navigator)) { $('meterGps').textContent = 'לא נתמך במכשיר'; return; }
+  if (!('geolocation' in navigator)) { $('meterGps').textContent = 'GPS לא נתמך'; return; }
   $('meterGps').textContent = 'מחפש לוויינים…';
   live.watchId = navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
 }
 function onFix(pos) {
-  const { latitude: lat, longitude: lon, accuracy, speed } = pos.coords;
-  const t = pos.timestamp;
+  const { latitude: lat, longitude: lon, accuracy, speed } = pos.coords; const t = pos.timestamp;
   if (accuracy > 60) { $('meterGps').textContent = `דיוק נמוך (${Math.round(accuracy)} מ')`; return; }
-  $('meterGps').textContent = `פעיל · דיוק ${Math.round(accuracy)} מ'`;
+  $('meterGps').textContent = `GPS פעיל · ±${Math.round(accuracy)} מ'`;
   if (speed != null && !Number.isNaN(speed)) live.speed = speed * 3.6;
   if (live.lastFix) {
     const d = haversine(live.lastFix.lat, live.lastFix.lon, lat, lon);
     const dt = (t - live.lastFix.t) / 1000;
-    const noise = Math.max(4, Math.min(accuracy, live.lastFix.acc) * 0.5);   // תזוזה קטנה מרמת הרעש של ה-GPS = עמידה במקום
+    const noise = Math.max(4, Math.min(accuracy, live.lastFix.acc) * 0.5);
     const implied = dt > 0 ? (d / dt) * 3.6 : 0;
     if (d > noise && implied < 160) {
       live.meter.tick(new Date(t), 0, d);
+      live.track.push([lat, lon]);
       if (live.speed == null) live.speed = implied;
     }
-  }
+  } else live.track.push([lat, lon]);
   live.lastFix = { lat, lon, t, acc: accuracy };
   renderMeter();
 }
-function onGpsError(err) {
-  $('meterGps').textContent = err.code === 1 ? 'אין הרשאת מיקום — אפשר לאשר בהגדרות הדפדפן' : 'אין קליטה כרגע';
-}
+function onGpsError(err) { $('meterGps').textContent = err.code === 1 ? 'אין הרשאת מיקום' : 'אין קליטת GPS'; }
 function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371000, toRad = (x) => x * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const R = 6371000, r = (x) => x * Math.PI / 180;
+  const a = Math.sin(r(lat2 - lat1) / 2) ** 2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(r(lon2 - lon1) / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
-async function requestWakeLock() {
-  try { live.wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* לא קריטי */ }
-}
+async function requestWakeLock() { try { live.wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* */ } }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && live.timer) requestWakeLock(); });
 
 function renderMeter() {
   const m = live.meter;
   if (!m) {
     const t = tariffAt(new Date());
-    $('meterLbl').textContent = `מוכן לנסיעה · תעריף ${tariffHe(t.tariff)} · ${t.label}`;
-    const base = new LiveMeter(new Date(), live.opts).snapshot();
-    $('meterTotal').textContent = nis(base.total);
-    $('meterKm').textContent = '0.00'; $('meterTime').textContent = '00:00'; $('meterSpeed').textContent = '— km/h';
+    $('meterTotal').textContent = nis(new LiveMeter(new Date(), live.opts).snapshot().total);
+    $('meterSub').textContent = `מוכן · ${TARIFF_NAMES[t.tariff]} · ${t.label}`;
+    $('meterKm').textContent = '0.00'; $('meterTime').textContent = '00:00'; $('meterSpeed').textContent = '—';
     return;
   }
   const s = m.snapshot();
-  $('meterLbl').textContent = `${live.timer ? 'מחיר עד עכשיו' : 'סיכום'} · תעריף ${tariffHe(s.tariff)}`;
   $('meterTotal').textContent = nis(s.total);
+  $('meterSub').textContent = `${live.timer ? 'מחיר עד עכשיו' : 'סיכום'} · ${TARIFF_NAMES[s.tariff]}`;
   $('meterKm').textContent = s.km.toFixed(2);
   const sec = Math.round(m.seconds);
   $('meterTime').textContent = sec >= 3600 ? `${Math.floor(sec / 3600)}:${pad2(Math.floor(sec % 3600 / 60))}:${pad2(sec % 60)}` : `${pad2(Math.floor(sec / 60))}:${pad2(sec % 60)}`;
-  $('meterSpeed').textContent = live.speed == null ? '— km/h' : `${Math.round(live.speed)} km/h`;
+  $('meterSpeed').textContent = live.speed == null ? '—' : String(Math.round(live.speed));
 }
 function stopRide() {
   clearInterval(live.timer); live.timer = null;
   if (live.watchId != null) navigator.geolocation.clearWatch(live.watchId);
   live.wakeLock?.release?.(); live.wakeLock = null;
   try { localStorage.removeItem(STORE_KEY); } catch (e) { /* */ }
-  $('meter').classList.remove('running'); $('liveStop').hidden = true; $('meterGps').textContent = 'כבוי';
+  $('livePrice').classList.remove('running'); $('liveStop').hidden = true; $('meterGps').textContent = 'GPS כבוי';
   const fare = live.meter.snapshot();
-  renderResult('live', fare);
-  $('liveResult').hidden = false; $('liveAsked').value = ''; $('liveDiff').hidden = true;
-  $('liveHint').textContent = 'הנסיעה הסתיימה. השווה למה שהנהג מבקש.';
-  saveHistory(fare);
+  const ride = { id: Date.now(), at: live.meter.start.toISOString(), end: new Date().toISOString(), km: fare.km, minutes: fare.minutes, total: fare.total, cashTotal: fare.cashTotal, tariffLabel: fare.tariffLabel, dayLabel: fare.dayLabel, period: fare.period, lines: fare.lines, opts: { ...live.meter.opts }, track: live.track, asked: null };
+  saveRide(ride);
   renderMeter();
+  openRideSheet(ride, true);
 }
 function resetRide() {
-  live.meter = null; live.speed = null; live.lastFix = null;
-  $('liveResult').hidden = true; $('liveStart').hidden = false;
-  $('liveHint').textContent = 'לחץ "התחל נסיעה" כשהנהג מפעיל את המונה.';
+  live.meter = null; live.speed = null; live.lastFix = null; live.track = [];
+  $('liveStart').hidden = false; $('mapEmpty').textContent = 'המפה תופיע כאן בזמן הנסיעה';
   renderMeter();
 }
-function saveHistory(fare) {
-  try {
-    const h = JSON.parse(localStorage.getItem('mone.history') || '[]');
-    h.unshift({ at: live.meter.start.toISOString(), km: fare.km, minutes: fare.minutes, total: fare.total, tariffs: fare.tariffs, opts: live.meter.opts });
-    localStorage.setItem('mone.history', JSON.stringify(h.slice(0, 50)));
-  } catch (e) { /* */ }
-}
-// שחזור נסיעה שנקטעה (למשל אם הדפדפן נסגר)
 (function restore() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (!saved) return;
     if (Date.now() - new Date(saved.meter.start).getTime() > 6 * 3600000) { localStorage.removeItem(STORE_KEY); return; }
-    live.meter = LiveMeter.fromJSON(saved.meter); Object.assign(live.opts, saved.opts); syncLiveChips();
+    live.meter = LiveMeter.fromJSON(saved.meter); Object.assign(live.opts, saved.opts); live.track = saved.track || [];
+    renderTiles($('liveTiles'), live.opts, live.meter.period, () => { Object.assign(live.meter.opts, live.opts); renderMeter(); });
     showView('live'); startRide(true);
   } catch (e) { /* */ }
 })();
 renderMeter();
+
+// ============ נסיעות ============
+const HIST_KEY = 'mone.history';
+const loadRides = () => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) { return []; } };
+const storeRides = (list) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 100))); } catch (e) { /* */ } };
+function saveRide(ride) { const list = loadRides(); list.unshift(ride); storeRides(list); }
+function updateRide(ride) { const list = loadRides(); const i = list.findIndex(r => r.id === ride.id); if (i >= 0) list[i] = ride; storeRides(list); }
+function renderRides() {
+  const list = loadRides();
+  $('ridesEmpty').hidden = list.length > 0;
+  $('ridesList').innerHTML = list.slice(0, 7).map(r => {
+    const d = new Date(r.at);
+    return `<button type="button" class="ride" data-id="${r.id}"><span class="meta"><b>${fmtDT(d)}</b><span>${r.km.toFixed(1)} ק"מ · ${Math.round(r.minutes)} דק' · ${esc(r.tariffLabel)}</span></span><span class="amt">${nis(r.total)}</span></button>`;
+  }).join('');
+  $('ridesList').onclick = (e) => { const b = e.target.closest('.ride'); if (!b) return; const r = loadRides().find(x => x.id === Number(b.dataset.id)); if (r) openRideSheet(r, false); };
+}
+function openRideSheet(ride, justEnded) {
+  const fare = { lines: ride.lines, total: ride.total, cashTotal: ride.cashTotal, tariffLabel: ride.tariffLabel, dayLabel: ride.dayLabel, period: ride.period };
+  const html = `<p class="note">${fmtDT(new Date(ride.at))} · ${ride.km.toFixed(2)} ק"מ · ${Math.round(ride.minutes)} דק'</p>
+    ${breakdownHtml(fare)}
+    <label class="field asked"><span>הנהג ביקש</span><input id="rideAsked" type="number" inputmode="decimal" min="0" step="1" placeholder="₪" value="${ride.asked || ''}"></label>
+    <div id="rideDiff">${diffHtml(ride.asked, ride.total)}</div>
+    <div class="actions">${justEnded ? '<button class="btn" id="rideNew" type="button">נסיעה חדשה</button>' : '<button class="btn ghost" id="rideDel" type="button">מחק נסיעה</button>'}</div>`;
+  openSheet(justEnded ? 'סיכום הנסיעה' : 'פרטי הנסיעה', html, (b) => {
+    b.querySelector('#rideAsked').addEventListener('input', (e) => { ride.asked = Number(e.target.value) || null; updateRide(ride); b.querySelector('#rideDiff').innerHTML = diffHtml(ride.asked, ride.total); });
+    b.querySelector('#rideNew')?.addEventListener('click', () => { closeSheet(); resetRide(); });
+    b.querySelector('#rideDel')?.addEventListener('click', () => { storeRides(loadRides().filter(r => r.id !== ride.id)); closeSheet(); renderRides(); });
+  });
+  if (justEnded) onSheetClose = () => { if (!live.timer) resetRide(); };
+}
+
+// ============ עוד ============
+document.querySelectorAll('#view-more [data-sheet]').forEach(b => b.addEventListener('click', () => ({ tariffs: openTariffs, rights: openRights, complaint: openComplaint, about: openAbout })[b.dataset.sheet]()));
+
+function openTariffs() {
+  const p = activePeriod(new Date());
+  const row = (label, a, b, c) => `<tr><td>${label}</td><td class="n">${a}</td><td class="n">${b}</td><td class="n">${c}</td></tr>`;
+  const v = (x) => (x * VAT).toFixed(2);
+  openSheet('התעריפים הנוכחיים', `
+    <p class="note">${p.name === 'קבוע' ? 'הסט הקבוע' : 'הוראת שעה'} · ${fmtDate(p.valid_from)}${p.valid_to ? '–' + fmtDate(p.valid_to) : ' ואילך'} · המחירים כאן כוללים מע"מ 18% (באילת: המחיר הנקוב בצו, ללא מע"מ)</p>
+    <table class="tbl"><tr><th></th><th>א'</th><th>ב'</th><th>ג'</th></tr>
+      ${row('הפעלת המונה', v(p.start), v(p.start), v(p.start))}
+      ${row('לכל דקה', v(p.per_min.A), v(p.per_min.B), v(p.per_min.C))}
+      ${row('לכל ק"מ, עד 10 ק"מ', v(p.per_km_upto10.A), v(p.per_km_upto10.B), v(p.per_km_upto10.C))}
+      ${row('לכל ק"מ, מעל 10 ק"מ', v(p.per_km_over10.A), v(p.per_km_over10.B), v(p.per_km_over10.C))}
+      ${row('שעת המתנה', v(p.wait_hour.A), v(p.wait_hour.B), v(p.wait_hour.C))}
+    </table>
+    <table class="tbl"><tr><th>תוספת</th><th></th></tr>
+      <tr><td>הזמנת מונית</td><td class="n">${v(p.order_surcharge)}</td></tr>
+      <tr><td>יציאה מנתב"ג / מרמון וחיפה</td><td class="n">${v(T.surcharges.ben_gurion)} / ${v(T.surcharges.ramon_or_haifa_airport)}</td></tr>
+      <tr><td>כביש 6 / קטע 18</td><td class="n">${v(T.surcharges.road6_main)} / ${v(T.surcharges.road6_segment18)}</td></tr>
+      <tr><td>מנהרות הכרמל, קטע / שניים</td><td class="n">${v(T.surcharges.carmel_tunnels_one)} / ${v(T.surcharges.carmel_tunnels_two)}</td></tr>
+      <tr><td>נתיב מהיר</td><td class="n">לפי השלט</td></tr>
+    </table>
+    <table class="tbl"><tr><th>מתי חל כל תעריף</th><th>א'</th><th>ב'</th><th>ג'</th></tr>
+      ${row('ראשון–רביעי', '06:00–21:00', '21:01–05:59', '—')}
+      ${row('חמישי', '06:00–21:00', '21:01–23:00', '23:01–05:59')}
+      ${row('שישי וערב חג', '06:00–16:00', '16:01–21:00', '21:01–05:59')}
+      ${row('שבת וחג', '—', '06:00–19:00', '19:01–05:59')}
+    </table>
+    <p class="note">מקור: צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026.</p>`);
+}
+
+const FACTS = [
+  ['המונה חובה — בכל נסיעה מיוחדת', 'הנהג מפעיל את המונה כשהמונית עומדת לרשותך, ומכבה בסיום. "ספיישל" במחיר קבוע מותר רק אם הוא נמוך ממה שהמונה היה מראה.', 'תקנות התעבורה 510, 512'],
+  ['אסור לגבות שום דבר מעבר למונה', 'לא "עמלת אשראי", לא טיפ חובה, לא דמי מזוודות. רק התוספות שבצו: הזמנה, יציאה משדה תעופה, כבישי אגרה שביקשת.', 'תקנה 512(3)'],
+  ['מספר נוסעים לא משנה את המחיר', 'עד המותר ברישיון הרכב, ועוד שני ילדים מתחת לגיל 5. גם ואן גדול או מונית נגישה — אותו תעריף.', 'תקנה 502; התוספת בוטלה ב-2020'],
+  ['מזוודות — חינם', 'התוספת על כבודה פקעה ב-31.12.2020. הנהג חייב לעזור בהטענה ובפריקה.', 'תקנה 504; הצו, חלק ד\' סעיף 3'],
+  ['נוסע עם מוגבלות', 'אסור לסרב, אסור לגבות תוספת על כיסא גלגלים או כלב נחייה, והנהג חייב לסייע בעלייה ובירידה. מונית נגישה שהוזמנה מחברה — עד חצי שעה.', 'חוק שוויון זכויות לאנשים עם מוגבלות'],
+  ['הדרך הקצרה, והיעד שאתה בוחר', 'הנהג חייב לנסוע בדרך הקצרה ביותר בנסיבות, ולכבד מסלול שביקשת. אפשר לשנות יעד תוך כדי נסיעה.', 'תקנה 503'],
+  ['אסור לסרב', 'הנהג חייב להסיע כל נוסע ומטענו לכל יעד, אלא מסיבה סבירה. אסור להתנות בנסיעה ארוכה או במחיר.', 'תקנה 501'],
+  ['המונה חייב להיות גלוי', 'צג המונה חייב להיות גלוי לנוסעים מכל המושבים, כל הנסיעה.', 'תקנה 509(ב)'],
+  ['קבלה', 'בקש קבלה מודפסת מהמונה — היא הבסיס לכל תלונה. באפליקציה הזו תוכל להפיק "קבלה" משלך להשוואה (בשלב הבא).', ''],
+  ['עישון ורדיו', 'אסור לנהג לעשן כשיש נוסעים; חייב להנמיך רדיו לפי בקשה.', 'משרד התחבורה — חובות הנהג'],
+];
+function openRights() {
+  openSheet('ידעת? זכויות הנוסע', `<div class="facts">${FACTS.map(([t, d, s]) => `<div class="fact"><b>${t}</b>${d}${s ? `<small>${s}</small>` : ''}</div>`).join('')}</div>`);
+}
+
+function openComplaint() {
+  const rides = loadRides(); const last = rides[0];
+  const when = last ? fmtDT(new Date(last.at)) : fmtDT(new Date());
+  openSheet('הגשת תלונה על נהג', `
+    <p class="note">משרד התחבורה מטפל בתלונות על הפקעת מחיר, אי הפעלת מונה, סירוב להסיע ועוד — רק אם הוגשו <b>עד חודשיים</b> מהאירוע, עם הפרטים שלמטה.</p>
+    <label class="field"><span>מס' רישיון המונית</span><input id="cTaxi" type="text" inputmode="numeric" placeholder="על ה'כובע' ועל הדלת האחורית"></label>
+    <label class="field"><span>שם בעל המונית / הנהג</span><input id="cDriver" type="text" placeholder="מהלוחית שבתוך המונית"></label>
+    <label class="field"><span>תאריך ושעה</span><input id="cWhen" type="text" value="${when}"></label>
+    <label class="field"><span>מקום</span><input id="cWhere" type="text" placeholder="מאיפה לאן"></label>
+    <textarea id="cText" placeholder="מה קרה? (למשל: הנהג דרש 140 ₪ בעוד שהמונה/החישוב לפי הצו הוא 117 ₪)">${last && last.asked ? `הנהג דרש ${nis(last.asked)}; המחיר המרבי לפי הצו לנסיעה של ${last.km.toFixed(1)} ק"מ ו-${Math.round(last.minutes)} דקות (${last.tariffLabel}) הוא ${nis(last.total)}.` : ''}</textarea>
+    <div class="actions"><button class="btn" id="cCopy" type="button">העתק את הטקסט</button><a class="btn ghost" href="tel:*8787" style="text-decoration:none;display:flex;align-items:center;justify-content:center">חייג *8787</a></div>
+    <p class="note">הגשה: <a href="https://www.gov.il/he/pages/taxi_driver_and_passenger_information?chapterIndex=2" target="_blank" rel="noopener">משרד התחבורה — הגשת תלונה על נהג מונית</a>. צרף קבלה וצילום מספר המונית.</p>`, (b) => {
+    b.querySelector('#cCopy').onclick = async () => {
+      const g = (id) => b.querySelector(id).value.trim();
+      const txt = `תלונה על נהג מונית\nמס' רישיון המונית: ${g('#cTaxi')}\nבעל המונית/הנהג: ${g('#cDriver')}\nתאריך ושעה: ${g('#cWhen')}\nמקום: ${g('#cWhere')}\n\n${g('#cText')}\n\n(חושב באמצעות אפליקציית "מונה" לפי צו פיקוח על מחירי נסיעה במוניות)`;
+      try { await navigator.clipboard.writeText(txt); b.querySelector('#cCopy').textContent = 'הועתק ✓'; } catch (e) { b.querySelector('#cCopy').textContent = 'לא ניתן להעתיק'; }
+    };
+  });
+}
+
+function openAbout() {
+  openSheet('אודות', `<p>"מונה" מחשבת את המחיר המרבי החוקי של נסיעה במונית מיוחדת בישראל, לפי צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026 (ק"ת 12345), ולפי תקנות התעבורה.</p>
+    <p class="note">החישוב הוא הערכה: המונה המכויל במונית הוא הקובע, ומדידת GPS יכולה לסטות בכמה אחוזים. התעריפים מתעדכנים כל 1 באפריל.</p>
+    <p class="note">מקורות: <a href="https://www.gov.il/he/pages/taxi-rate-2026" target="_blank" rel="noopener">משרד התחבורה — תעריפי מוניות 2026</a> · <a href="https://he.wikisource.org/wiki/צו_פיקוח_על_מחירי_מצרכים_ושירותים_(מחירי_נסיעה_במוניות)" target="_blank" rel="noopener">נוסח הצו</a> · <a href="https://www.kolzchut.org.il/he/זכותון_נסיעה_במונית_מיוחדת_(ספיישל)" target="_blank" rel="noopener">כל-זכות</a></p>
+    <p class="note">גרסה 0.4 · לו קורק · lou.korek@gmail.com</p>`);
+}

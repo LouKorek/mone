@@ -2,113 +2,110 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#e0aa00">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0f141d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="מונה">
 <title>מונה</title>
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-64.png" sizes="64x64" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@900&family=Heebo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
-<header class="topbar">
-  <h1>מונה</h1>
-  <span class="sub" id="topSub">מחשבון</span>
-</header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6 3h4l2 5-2.5 1.5a11 11 0 0 0 5 5L16 12l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="i-plane" viewBox="0 0 24 24"><path d="M2 14l8-2 4-8h3l-2 8 6 2v2l-6 0-2 6h-2l-1-6-5 1z"/></symbol>
+  <symbol id="i-road" viewBox="0 0 24 24"><path d="M4 21L9 3h2l-1 18zm9 0L14 3h2l4 18zM11.3 6h1.4l.2 3h-1.8zm-.4 6h2.2l.3 4h-2.8z"/></symbol>
+  <symbol id="i-tunnel" viewBox="0 0 24 24"><path d="M3 21V12a9 9 0 0 1 18 0v9h-4v-9a5 5 0 0 0-10 0v9z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></symbol>
+  <symbol id="i-palm" viewBox="0 0 24 24"><path d="M11 22V10l-4 3-1-1 4-4-6-1 1-2 6 1-3-5 2-1 3 5 3-5 2 1-3 5 6-1 1 2-6 1 4 4-1 1-4-3v12z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-13h-2v6l5 3 1-1.7-4-2.3z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z"/></symbol>
+  <symbol id="i-calc" viewBox="0 0 24 24"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm1 3v4h10V5zm0 6v2h3v-2zm0 4v2h3v-2zm5-4v2h3v-2zm0 4v2h3v-2z"/></symbol>
+  <symbol id="i-meter" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9v1h4l-1-1a6 6 0 1 1 12 0l-1 1h4v-1a9 9 0 0 0-9-9zm-1 9l4-5 1 1-3 5a1.5 1.5 0 1 1-2-1zM5 15h14v2H5z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 6h16v2H4zm0 6h10v2H4z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8 1.5-1.5L10 12l6.5-6.5z"/></symbol>
+</svg>
 
-<main>
-  <!-- מחשבון -->
-  <section class="view" id="view-calc" aria-labelledby="tab-calc">
-    <div class="row2">
-      <div class="field"><label for="km">מרחק</label><input id="km" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0.0"><span class="unit">ק"מ</span></div>
-      <div class="field"><label for="minutes">משך</label><input id="minutes" type="number" inputmode="numeric" min="0" step="1" placeholder="0"><span class="unit">דק'</span></div>
-    </div>
-    <div class="field">
-      <label for="when">מתי</label>
-      <input id="when" type="datetime-local">
-      <button class="now-btn" id="nowBtn" type="button">עכשיו</button>
-    </div>
-    <div class="tarif" id="tarifLine"></div>
+<div id="app">
+  <header class="topbar">
+    <img src="icons/logo-96.png" alt="" width="34" height="34">
+    <h1>מונה</h1>
+    <span class="sub" id="topSub">מחשבון</span>
+  </header>
 
-    <div class="section-label">תוספות</div>
-    <div class="chips" id="chips">
-      <button class="chip" type="button" data-opt="order" aria-pressed="false">הזמנה (טלפון/אפליקציה)</button>
-      <button class="chip" type="button" data-opt="airport" data-value="ben-gurion" aria-pressed="false">יציאה מנתב"ג</button>
-      <button class="chip" type="button" data-opt="airport" data-value="ramon" aria-pressed="false">יציאה מרמון / חיפה</button>
-      <button class="chip" type="button" data-opt="road6" aria-pressed="false">כביש 6</button>
-      <button class="chip" type="button" data-opt="segment18" aria-pressed="false">קטע 18</button>
-      <button class="chip" type="button" data-opt="carmel" data-value="1" aria-pressed="false">מנהרות הכרמל – קטע אחד</button>
-      <button class="chip" type="button" data-opt="carmel" data-value="2" aria-pressed="false">מנהרות הכרמל – שני קטעים</button>
-      <button class="chip" type="button" data-opt="eilat" aria-pressed="false">אזור אילת (ללא מע"מ)</button>
-    </div>
-    <div class="field"><label for="fastLane">נתיב מהיר (לפי השלט)</label><input id="fastLane" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0"><span class="unit">₪</span></div>
-
-    <div class="result" id="result" hidden>
-      <div class="total"><span class="lbl">המחיר המרבי לפי הצו</span><span class="amount" id="calcTotal">₪ 0.00</span></div>
-      <div class="cash" id="calcCashNote"></div>
-      <div class="breakdown" id="calcBreakdown"></div>
-      <div class="compare">
-        <div class="field"><label for="asked">הנהג ביקש</label><input id="asked" type="number" inputmode="decimal" min="0" step="1" placeholder="0"><span class="unit">₪</span></div>
-        <div class="diff" id="diff" hidden></div>
+  <main>
+    <!-- ================= מחשבון ================= -->
+    <section class="view" id="view-calc">
+      <div class="row2">
+        <label class="field"><span>ק"מ</span><input id="km" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0.0"></label>
+        <label class="field"><span>דקות</span><input id="minutes" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></label>
       </div>
-    </div>
-    <p class="note" id="periodNote"></p>
-  </section>
-
-  <!-- מונה חי -->
-  <section class="view" id="view-live" hidden aria-labelledby="tab-live">
-    <div class="meter" id="meter">
-      <div class="meter-lbl" id="meterLbl">מוכן לנסיעה</div>
-      <div class="meter-big" id="meterTotal">₪ 12.46</div>
-      <div class="meter-row"><span>ק"מ</span><span id="meterKm">0.00</span></div>
-      <div class="meter-row"><span>זמן</span><span id="meterTime">00:00</span></div>
-      <div class="meter-row"><span>מהירות</span><span id="meterSpeed">— km/h</span></div>
-      <div class="meter-row gps"><span>GPS</span><span id="meterGps">כבוי</span></div>
-    </div>
-
-    <div class="section-label">תוספות לנסיעה הזו</div>
-    <div class="chips" id="liveChips">
-      <button class="chip" type="button" data-opt="order" aria-pressed="false">הזמנה</button>
-      <button class="chip" type="button" data-opt="airport" data-value="ben-gurion" aria-pressed="false">יציאה מנתב"ג</button>
-      <button class="chip" type="button" data-opt="airport" data-value="ramon" aria-pressed="false">יציאה מרמון / חיפה</button>
-      <button class="chip" type="button" data-opt="road6" aria-pressed="false">כביש 6</button>
-      <button class="chip" type="button" data-opt="segment18" aria-pressed="false">קטע 18</button>
-      <button class="chip" type="button" data-opt="carmel" data-value="1" aria-pressed="false">כרמל – קטע אחד</button>
-      <button class="chip" type="button" data-opt="carmel" data-value="2" aria-pressed="false">כרמל – שני קטעים</button>
-      <button class="chip" type="button" data-opt="eilat" aria-pressed="false">אילת</button>
-    </div>
-    <div class="field"><label for="liveFastLane">נתיב מהיר (לפי השלט)</label><input id="liveFastLane" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0"><span class="unit">₪</span></div>
-
-    <p class="hint" id="liveHint">לחץ "התחל נסיעה" כשהנהג מפעיל את המונה. האפליקציה משתמשת במיקום רק בזמן הנסיעה, והמסך יישאר דלוק.</p>
-    <button class="btn" id="liveStart" type="button">התחל נסיעה</button>
-    <button class="btn warn" id="liveStop" type="button" hidden>סיים נסיעה</button>
-
-    <div class="result" id="liveResult" hidden>
-      <div class="total"><span class="lbl">המחיר המרבי לנסיעה</span><span class="amount" id="liveTotal">₪ 0.00</span></div>
-      <div class="cash" id="liveCashNote"></div>
-      <div class="breakdown" id="liveBreakdown"></div>
-      <div class="compare">
-        <div class="field"><label for="liveAsked">הנהג ביקש</label><input id="liveAsked" type="number" inputmode="decimal" min="0" step="1" placeholder="0"><span class="unit">₪</span></div>
-        <div class="diff" id="liveDiff" hidden></div>
+      <div class="field when">
+        <span>מתי</span>
+        <input id="when" type="datetime-local" aria-label="תאריך ושעת הנסיעה">
+        <button class="mini" id="nowBtn" type="button">עכשיו</button>
+        <b class="badge" id="calcTariff">א'</b>
       </div>
-      <p class="note">המרחק נמדד ב-GPS של הטלפון; סטייה של כמה אחוזים מהמונה במונית היא נורמלית, בעיקר בעיר צפופה.</p>
-      <button class="btn ghost" id="liveReset" type="button">נסיעה חדשה</button>
-    </div>
-  </section>
+      <div class="tiles" id="calcTiles" role="group" aria-label="תוספות"></div>
+      <button class="price" id="calcPrice" type="button" aria-label="פתח פירוט">
+        <span class="big" id="calcTotal">₪ 12.46</span>
+        <span class="sub" id="calcSub">הזן מרחק או דקות</span>
+      </button>
+      <label class="field asked"><span>הנהג ביקש</span><input id="asked" type="number" inputmode="decimal" min="0" step="1" placeholder="₪"></label>
+      <div class="diff" id="calcDiff" hidden></div>
+    </section>
 
-  <!-- תעריפים -->
-  <section class="view" id="view-info" hidden aria-labelledby="tab-info">
-    <div class="placeholder">לוח התעריפים והזכויות ייבנה בשלב 4.</div>
-  </section>
-</main>
+    <!-- ================= מונה חי ================= -->
+    <section class="view" id="view-live" hidden>
+      <div class="price live" id="livePrice">
+        <span class="big" id="meterTotal">₪ 12.46</span>
+        <span class="sub" id="meterSub">מוכן לנסיעה</span>
+        <span class="stats"><b id="meterKm">0.00</b> ק"מ · <b id="meterTime">00:00</b> · <b id="meterSpeed">—</b> קמ"ש</span>
+      </div>
+      <div class="map" id="map"><div class="map-empty" id="mapEmpty">המפה תופיע כאן בזמן הנסיעה</div><div class="gps" id="meterGps">GPS כבוי</div></div>
+      <div class="tiles compact" id="liveTiles" role="group" aria-label="תוספות לנסיעה"></div>
+      <button class="btn" id="liveStart" type="button">התחל נסיעה</button>
+      <button class="btn warn" id="liveStop" type="button" hidden>סיים נסיעה</button>
+    </section>
 
-<nav class="tabbar" role="tablist">
-  <button role="tab" id="tab-calc" aria-selected="true" data-view="calc">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h3M13 12h3M8 16h3M13 16h3"/></svg>מחשבון</button>
-  <button role="tab" id="tab-live" aria-selected="false" data-view="live">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>מונה חי</button>
-  <button role="tab" id="tab-info" aria-selected="false" data-view="info">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></svg>תעריפים</button>
-</nav>
+    <!-- ================= נסיעות ================= -->
+    <section class="view" id="view-rides" hidden>
+      <div class="list" id="ridesList"></div>
+      <p class="empty" id="ridesEmpty">עדיין אין נסיעות שמורות. נסיעות מהמונה החי נשמרות כאן אוטומטית.</p>
+    </section>
+
+    <!-- ================= עוד ================= -->
+    <section class="view" id="view-more" hidden>
+      <div class="list menu">
+        <button type="button" data-sheet="tariffs"><svg><use href="#i-list"/></svg><span>התעריפים הנוכחיים</span><svg class="chev"><use href="#i-chev"/></svg></button>
+        <button type="button" data-sheet="rights"><svg><use href="#i-info"/></svg><span>ידעת? זכויות הנוסע</span><svg class="chev"><use href="#i-chev"/></svg></button>
+        <button type="button" data-sheet="complaint"><svg><use href="#i-phone"/></svg><span>הגשת תלונה על נהג</span><svg class="chev"><use href="#i-chev"/></svg></button>
+        <button type="button" data-sheet="about"><svg><use href="#i-meter"/></svg><span>אודות ומקורות</span><svg class="chev"><use href="#i-chev"/></svg></button>
+      </div>
+      <p class="fine">חשבון, מסמכים משפטיים ונגישות — בשלבים הבאים.</p>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist">
+    <button role="tab" aria-selected="true" data-view="calc"><svg><use href="#i-calc"/></svg>מחשבון</button>
+    <button role="tab" aria-selected="false" data-view="live"><svg><use href="#i-meter"/></svg>מונה חי</button>
+    <button role="tab" aria-selected="false" data-view="rides"><svg><use href="#i-list"/></svg>נסיעות</button>
+    <button role="tab" aria-selected="false" data-view="more"><svg><use href="#i-more"/></svg>עוד</button>
+  </nav>
+</div>
+
+<!-- גיליון תחתון -->
+<div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="grip"></div>
+  <div class="sheet-head"><h2 id="sheetTitle"></h2><button class="close" id="sheetClose" type="button" aria-label="סגור">✕</button></div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
 
 <script type="module" src="src/app.js"></script>
 </body>
