@@ -5,8 +5,9 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const tariffs = read('./src/data/tariffs.json');
 const hebcal = read('./src/hebcal.js').replace(/^export /gm, '');
 const engine = read('./src/engine.js').replace(/^import .*$/gm, '').replace(/^export /gm, '');
+const cloud = read('./src/cloud.js').replace(/^export /gm, '');
 let app = read('./src/app.js').replace(/^import .*$/gm, '');
-const js = `const tariffs = ${tariffs.trim()};\n${hebcal}\n${engine}\n${app}`;
+const js = `const tariffs = ${tariffs.trim()};\n${hebcal}\n${engine}\n${cloud}\n${app}`;
 const css = read('./src/styles.css');
 
 let html = read('./index.html')

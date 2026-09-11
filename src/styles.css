@@ -148,3 +148,20 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .receipt-img { width: 100%; max-height: 52dvh; object-fit: contain; border-radius: 8px; background: #fbfaf5; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
 .sheet .row2 { grid-template-columns: 1.2fr 1fr; }
 .sheet .row2 .field input { font-size: 15px; width: 40px; }
+
+/* חשבון */
+.list.menu button.account { padding: 10px 12px; }
+.list.menu button.account img { border-radius: 8px; flex: none; }
+.list.menu button.account span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.list.menu button.account b { font-weight: 600; }
+.list.menu button.account small { color: var(--ink-3); font-size: 12px; }
+.seg { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--ink-3); border-radius: 8px; padding: 7px; font-weight: 500; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.err { color: var(--warn); font-size: 13px; margin: 0; }
+.linkbtn { background: transparent; border: 0; color: var(--ink-3); text-decoration: underline; font-size: 13px; padding: 2px; align-self: center; }
+.gicon { width: 18px; height: 18px; vertical-align: -4px; margin-inline-end: 4px; }
+.btn.danger { background: var(--warn); color: #fff; border: 0; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.sheet-body a { color: var(--accent-text); }

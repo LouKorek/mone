@@ -1,5 +1,6 @@
 import { loadTariffs, computeFare, tariffAt, activePeriod, getTariffs, TARIFF_NAMES, LiveMeter } from './engine.js';
 import tariffs from './data/tariffs.json' with { type: 'json' };
+import { initCloud, onUser, getUser, signUpEmail, signInEmail, resetPassword, signInGoogle, signOut, pushRides, pullRides, deleteRideCloud, deleteAccount, errorHe } from './cloud.js';
 
 loadTariffs(tariffs);
 
@@ -287,8 +288,8 @@ renderMeter();
 const HIST_KEY = 'mone.history';
 const loadRides = () => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) { return []; } };
 const storeRides = (list) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 100))); } catch (e) { /* */ } };
-function saveRide(ride) { const list = loadRides(); list.unshift(ride); storeRides(list); }
-function updateRide(ride) { const list = loadRides(); const i = list.findIndex(r => r.id === ride.id); if (i >= 0) list[i] = ride; storeRides(list); }
+function saveRide(ride) { const list = loadRides(); list.unshift(ride); storeRides(list); if (getUser()) pushRides([ride]).catch(() => {}); }
+function updateRide(ride) { const list = loadRides(); const i = list.findIndex(r => r.id === ride.id); if (i >= 0) list[i] = ride; storeRides(list); if (getUser()) pushRides([ride]).catch(() => {}); }
 function renderRides() {
   const list = loadRides();
   $('ridesEmpty').hidden = list.length > 0;
@@ -311,7 +312,7 @@ function openRideSheet(ride, justEnded) {
     b.querySelector('#rideAsked').addEventListener('input', (e) => { ride.asked = Number(e.target.value) || null; updateRide(ride); b.querySelector('#rideDiff').innerHTML = diffHtml(ride.asked, ride.total); });
     b.querySelector('#rideReceipt').addEventListener('click', () => { onSheetClose = null; openReceipt(ride); });
     b.querySelector('#rideNew')?.addEventListener('click', () => { closeSheet(); resetRide(); });
-    b.querySelector('#rideDel')?.addEventListener('click', () => { storeRides(loadRides().filter(r => r.id !== ride.id)); closeSheet(); renderRides(); });
+    b.querySelector('#rideDel')?.addEventListener('click', () => { storeRides(loadRides().filter(r => r.id !== ride.id)); if (getUser()) deleteRideCloud(ride.id).catch(() => {}); closeSheet(); renderRides(); });
   });
   if (justEnded) onSheetClose = () => { if (!live.timer) resetRide(); };
 }
@@ -404,7 +405,96 @@ function openReceipt(ride) {
 }
 
 // ============ עוד ============
-document.querySelectorAll('#view-more [data-sheet]').forEach(b => b.addEventListener('click', () => ({ tariffs: openTariffs, rights: openRights, complaint: openComplaint, about: openAbout })[b.dataset.sheet]()));
+document.querySelectorAll('#view-more [data-sheet]').forEach(b => b.addEventListener('click', () => ({ account: openAccount, tariffs: openTariffs, rights: openRights, complaint: openComplaint, about: openAbout })[b.dataset.sheet]()));
+
+
+// ============ חשבון (Firebase) ============
+let cloudReady = false;
+function accountLabel(u) { return u ? (u.displayName || u.email || 'מחובר') : 'התחברות / הרשמה'; }
+function renderAccountRow() {
+  const u = getUser();
+  $('accountLabel').textContent = accountLabel(u);
+  $('accountSub').textContent = u ? 'הנסיעות מסונכרנות בענן' : 'שמור נסיעות בענן וגש אליהן מכל מכשיר';
+}
+async function syncRides() {
+  try {
+    const local = loadRides();
+    const cloud = await pullRides();
+    const byId = new Map(cloud.map(r => [r.id, r]));
+    const toPush = local.filter(r => !byId.has(r.id));
+    local.forEach(r => { if (!byId.has(r.id)) byId.set(r.id, r); });
+    const merged = [...byId.values()].sort((a, b) => new Date(b.at) - new Date(a.at));
+    storeRides(merged);
+    if (toPush.length) await pushRides(toPush);
+    renderRides();
+  } catch (e) { console.warn('sync', e); }
+}
+initCloud().then(() => {
+  cloudReady = true;
+  onUser((u) => { renderAccountRow(); if (u) syncRides(); });
+}).catch(() => { $('accountSub').textContent = 'אין חיבור לאינטרנט — הנסיעות נשמרות במכשיר'; });
+
+function openAccount() {
+  const u = getUser();
+  if (!cloudReady) return openSheet('חשבון', '<p class="note">החיבור לענן עדיין נטען, או שאין אינטרנט. הנסיעות נשמרות בינתיים במכשיר.</p>');
+  if (u) return openProfile(u);
+  openSheet('התחברות', `
+    <div class="seg" role="tablist"><button type="button" class="on" data-mode="in">התחברות</button><button type="button" data-mode="up">הרשמה</button></div>
+    <label class="field" id="nameRow" hidden><span>שם</span><input id="aName" type="text" autocomplete="name" placeholder="איך לקרוא לך"></label>
+    <label class="field"><span>אימייל</span><input id="aEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" dir="ltr"></label>
+    <label class="field"><span>סיסמה</span><input id="aPass" type="password" autocomplete="current-password" placeholder="6 תווים לפחות" dir="ltr"></label>
+    <p class="err" id="aErr" hidden></p>
+    <button class="btn" id="aGo" type="button">התחבר</button>
+    <button class="btn ghost" id="aGoogle" type="button"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10c.8-2.3 3-4 5.6-4z"/></svg> המשך עם Google</button>
+    <button type="button" class="linkbtn" id="aForgot">שכחתי סיסמה</button>
+    <p class="note">בהרשמה אתה מאשר את <a href="#" data-doc="terms">תנאי השימוש</a> ו<a href="#" data-doc="privacy">מדיניות הפרטיות</a> (יפורסמו בשלב הבא).</p>`, (b) => {
+    let mode = 'in';
+    const err = (m) => { const e = b.querySelector('#aErr'); e.hidden = !m; e.textContent = m || ''; };
+    b.querySelectorAll('.seg button').forEach(t => t.onclick = () => { mode = t.dataset.mode; b.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === t)); b.querySelector('#nameRow').hidden = mode === 'in'; b.querySelector('#aGo').textContent = mode === 'in' ? 'התחבר' : 'צור חשבון'; b.querySelector('#aPass').autocomplete = mode === 'in' ? 'current-password' : 'new-password'; err(''); });
+    b.querySelector('#aGo').onclick = async () => {
+      const email = b.querySelector('#aEmail').value.trim(), pass = b.querySelector('#aPass').value, name = b.querySelector('#aName').value.trim();
+      if (!email || !pass) return err('מלא אימייל וסיסמה');
+      b.querySelector('#aGo').disabled = true; err('');
+      try { if (mode === 'in') await signInEmail(email, pass); else await signUpEmail(email, pass, name); closeSheet(); }
+      catch (e) { err(errorHe(e)); } finally { b.querySelector('#aGo').disabled = false; }
+    };
+    b.querySelector('#aGoogle').onclick = async () => { err(''); try { await signInGoogle(); closeSheet(); } catch (e) { err(errorHe(e)); } };
+    b.querySelector('#aForgot').onclick = async () => {
+      const email = b.querySelector('#aEmail').value.trim(); if (!email) return err('כתוב את האימייל שלך למעלה ואז לחץ "שכחתי סיסמה"');
+      try { await resetPassword(email); err('שלחנו לך מייל לאיפוס הסיסמה'); } catch (e) { err(errorHe(e)); }
+    };
+  });
+}
+function openProfile(u) {
+  const pid = u.providerData[0]?.providerId;
+  openSheet('החשבון שלי', `
+    <dl class="kv"><dt>שם</dt><dd>${esc(u.displayName || '—')}</dd><dt>אימייל</dt><dd>${esc(u.email || '—')}</dd><dt>התחברות</dt><dd>${pid === 'google.com' ? 'Google' : 'אימייל וסיסמה'}</dd><dt>נסיעות בענן</dt><dd>${loadRides().length}</dd></dl>
+    <p class="note">הנסיעות שלך נשמרות ב-Firebase (שרתי Google בתל אביב) ומסונכרנות לכל מכשיר שבו תתחבר.</p>
+    <div class="actions"><button class="btn ghost" id="pOut" type="button">התנתק</button><button class="btn ghost danger" id="pDel" type="button">מחק חשבון</button></div>`, (b) => {
+    b.querySelector('#pOut').onclick = async () => { await signOut(); closeSheet(); renderAccountRow(); };
+    b.querySelector('#pDel').onclick = () => openDeleteAccount(u);
+  });
+}
+function openDeleteAccount(u) {
+  const needPass = u.providerData[0]?.providerId === 'password';
+  openSheet('מחיקת חשבון', `
+    <p>המחיקה מוחקת לצמיתות את החשבון ואת כל הנסיעות השמורות בענן. הנסיעות שבמכשיר הזה יישארו רק אם תבחר להשאירן.</p>
+    ${needPass ? '<label class="field"><span>סיסמה לאישור</span><input id="dPass" type="password" autocomplete="current-password" dir="ltr"></label>' : '<p class="note">ייתכן שתתבקש לאשר מחדש את ההתחברות עם Google.</p>'}
+    <label class="check"><input id="dLocal" type="checkbox" checked> למחוק גם את הנסיעות שבמכשיר הזה</label>
+    <p class="err" id="dErr" hidden></p>
+    <div class="actions"><button class="btn danger" id="dGo" type="button">מחק לצמיתות</button><button class="btn ghost" id="dNo" type="button">ביטול</button></div>`, (b) => {
+    b.querySelector('#dNo').onclick = () => openProfile(u);
+    b.querySelector('#dGo').onclick = async () => {
+      const e = b.querySelector('#dErr'); e.hidden = true; b.querySelector('#dGo').disabled = true;
+      try {
+        await deleteAccount(needPass ? b.querySelector('#dPass').value : null);
+        if (b.querySelector('#dLocal').checked) storeRides([]);
+        closeSheet(); renderAccountRow(); renderRides();
+        openSheet('החשבון נמחק', '<p>החשבון וכל הנתונים בענן נמחקו. תודה שהשתמשת ב"מונה".</p>');
+      } catch (err) { e.hidden = false; e.textContent = errorHe(err); b.querySelector('#dGo').disabled = false; }
+    };
+  });
+}
 
 function openTariffs() {
   const p = activePeriod(new Date());
