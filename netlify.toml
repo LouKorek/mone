@@ -1,0 +1,8 @@
+[build]
+  command = "node build.mjs"
+  publish = "dist"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Permissions-Policy = "geolocation=(self)"
