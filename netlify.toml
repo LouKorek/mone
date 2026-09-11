@@ -2,6 +2,14 @@
   command = "node build.mjs"
   publish = "dist"
 
+[build.environment]
+  # החבילות ב-package.json משמשות רק לבניית האפליקציות (Android/iOS); לאתר לא צריך להריץ סקריפטי התקנה
+  NPM_FLAGS = "--no-audit --no-fund --ignore-scripts"
+  # מפתחות ה-API של Firebase הם הגדרות לקוח ציבוריות (ההגנה היא ב-Firestore rules), לא סודות —
+  # בלי זה סריקת הסודות של Netlify מפילה את הפריסה ("Exposed secrets detected")
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+  SECRETS_SCAN_OMIT_PATHS = "native/**,assets/**,fastlane/**,store/**,src/cloud.js,dist/**"
+
 # Firebase Auth: מגישים את דף ה-handler מהדומיין שלנו (proxy שקוף ל-firebaseapp.com),
 # אחרת התחברות Google ב-redirect נכשלת בדפדפנים שחוסמים אחסון צד-שלישי (Chrome 115+, Safari, Firefox).
 [[redirects]]
