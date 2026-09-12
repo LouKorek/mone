@@ -58,6 +58,9 @@ jobs:
       - name: Icons and splash
         run: npx capacitor-assets generate --android --iconBackgroundColor '#060d13' --iconBackgroundColorDark '#060d13' --splashBackgroundColor '#060d13' --splashBackgroundColorDark '#060d13'
 
+      - name: Compress splash and icons
+        run: node native/compress-png.mjs
+
       - name: Sync plugins
         run: npx cap sync android
 
