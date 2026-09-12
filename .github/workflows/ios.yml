@@ -1,17 +1,20 @@
-# בונה את אפליקציית iOS של "מונה" על macOS בענן ומעלה ל-TestFlight.
-# דורש Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (base64 של קובץ ה-.p8), APPLE_TEAM_ID,
-#               MATCH_GIT_URL (ריפו פרטי לתעודות), MATCH_GIT_TOKEN (PAT עם גישה אליו), MATCH_PASSWORD.
+# בונה את אפליקציית iOS של "מונה" על macOS בענן ומעלה ל-App Store Connect (TestFlight).
+# חתימה אוטומטית בענן דרך מפתח API של App Store Connect (כמו ב-klafim-ios) — בלי תעודות ידניות.
+# דורש Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (תוכן קובץ ה-.p8 כמו שהוא).
 name: iOS
 
 on:
   push:
     branches: [main]
-    paths-ignore: ['README.md', 'plan.html', '.github/workflows/android.yml', 'netlify.toml']
+    paths-ignore: ['README.md', 'plan.html', '.github/workflows/android.yml', 'netlify.toml', 'store/**']
   workflow_dispatch:
 
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  TEAM_ID: YZTLGU87C6
 
 jobs:
   build:
@@ -25,18 +28,13 @@ jobs:
         with:
           node-version: 22
 
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.3'
-          bundler-cache: false
-
-      - name: Xcode version
-        run: xcodebuild -version
+      - name: Select newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer"
+          xcodebuild -version
 
       - name: Install
-        run: |
-          npm install --no-audit --no-fund
-          gem install fastlane -N
+        run: npm install --no-audit --no-fund
 
       - name: Test
         run: npm test
@@ -47,7 +45,7 @@ jobs:
         run: node build.mjs
 
       - name: Create iOS project
-        run: npx cap add ios
+        run: npx cap add ios --packagemanager CocoaPods
 
       - name: Prepare iOS project
         run: node native/prepare-ios.mjs
@@ -57,29 +55,69 @@ jobs:
       - name: Icons and splash
         run: npx capacitor-assets generate --ios --iconBackgroundColor '#060d13' --iconBackgroundColorDark '#060d13' --splashBackgroundColor '#060d13' --splashBackgroundColorDark '#060d13'
 
+      - name: Compress splash and icons
+        run: node native/compress-png.mjs ios/App/App/Assets.xcassets
+
       - name: Sync plugins (CocoaPods)
         run: npx cap sync ios
 
-      - name: Build and upload to TestFlight
-        run: fastlane ios beta
+      - name: Write App Store Connect API key
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
-          MATCH_GIT_TOKEN: ${{ secrets.MATCH_GIT_TOKEN }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          FASTLANE_SKIP_UPDATE_CHECK: '1'
-          LC_ALL: en_US.UTF-8
-          LANG: en_US.UTF-8
+        run: |
+          mkdir -p ~/private_keys
+          printf '%s\n' "$ASC_KEY_P8" > ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          grep -q 'BEGIN PRIVATE KEY' ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 || { echo 'ASC_KEY_P8 לא נראה כמו קובץ p8 (חסר BEGIN PRIVATE KEY)'; exit 1; }
+
+      - name: Archive (cloud signing via ASC API key)
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
+            DEVELOPMENT_TEAM=$TEAM_ID \
+            CODE_SIGN_STYLE=Automatic \
+            archive | tee "$PWD/build/archive.log" | grep -E 'error|warning: .*sign|\*\* ARCHIVE' || true
+          test -d "$PWD/build/App.xcarchive" || { echo 'ה-archive נכשל — ראה archive.log'; tail -80 "$PWD/build/archive.log"; exit 1; }
+
+      - name: Export IPA
+        working-directory: ios/App
+        run: |
+          cat > ExportOptions.plist << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$PWD/build/App.xcarchive" \
+            -exportPath "$PWD/build/export" \
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }}
+          ls -la build/export
+
+      - name: Upload to App Store Connect
+        run: |
+          xcrun altool --upload-app -f ios/App/build/export/*.ipa -t ios \
+            --apiKey ${{ secrets.ASC_KEY_ID }} --apiIssuer ${{ secrets.ASC_ISSUER_ID }}
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: mone-ios-${{ github.run_number }}
           path: |
-            out/*.ipa
-            ~/Library/Logs/gym/*.log
+            ios/App/build/export/*.ipa
+            ios/App/build/archive.log
           retention-days: 30
           if-no-files-found: ignore
