@@ -61,6 +61,23 @@ if (!existsSync(ent)) {
 edit('App.xcodeproj/project.pbxproj', (s) => {
   if (!s.includes('CODE_SIGN_ENTITLEMENTS')) s = s.replace(/(PRODUCT_BUNDLE_IDENTIFIER = [^;]+;)/g, '$1\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;');
   s = s.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${versionName};`).replace(/CURRENT_PROJECT_VERSION = [^;]+;/g, `CURRENT_PROJECT_VERSION = ${buildNumber};`);
+  // 3b) GoogleService-Info.plist חייב להיכלל ב-bundle (Firebase Auth), אז מוסיפים אותו לפרויקט: קובץ + קבוצת App + שלב Resources
+  if (reversedClientId && !s.includes('GoogleService-Info.plist')) {
+    const fileRef = 'F1A0B2C3D4E5000000000001', buildFile = 'F1A0B2C3D4E5000000000002';
+    s = s.replace('/* Begin PBXBuildFile section */\n', `/* Begin PBXBuildFile section */\n\t\t${buildFile} /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = ${fileRef} /* GoogleService-Info.plist */; };\n`);
+    s = s.replace('/* Begin PBXFileReference section */\n', `/* Begin PBXFileReference section */\n\t\t${fileRef} /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };\n`);
+    const groupIdx = s.indexOf('path = App;');
+    const childrenIdx = groupIdx > 0 ? s.lastIndexOf('children = (', groupIdx) : -1;
+    if (childrenIdx < 0) { console.error('לא נמצאה קבוצת App ב-project.pbxproj'); process.exit(2); }
+    const insertAt = s.indexOf('\n', childrenIdx) + 1;
+    s = s.slice(0, insertAt) + `\t\t\t\t${fileRef} /* GoogleService-Info.plist */,\n` + s.slice(insertAt);
+    const resIdx = s.indexOf('isa = PBXResourcesBuildPhase;');
+    const filesIdx = resIdx > 0 ? s.indexOf('files = (', resIdx) : -1;
+    if (filesIdx < 0) { console.error('לא נמצא שלב Resources ב-project.pbxproj'); process.exit(2); }
+    const insertAt2 = s.indexOf('\n', filesIdx) + 1;
+    s = s.slice(0, insertAt2) + `\t\t\t\t${buildFile} /* GoogleService-Info.plist in Resources */,\n` + s.slice(insertAt2);
+    console.log('GoogleService-Info.plist נוסף לפרויקט Xcode');
+  }
   return s;
 });
 
