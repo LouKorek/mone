@@ -82,6 +82,7 @@ edit('App.xcodeproj/project.pbxproj', (s) => {
 });
 
 // 4) Podfile: Google Sign-In עבור @capacitor-firebase/authentication
+if (!existsSync(resolve(ios, 'Podfile'))) { console.error('אין Podfile — הפרויקט נוצר עם SPM. הרץ: npx cap add ios --packagemanager CocoaPods'); process.exit(3); }
 edit('Podfile', (s) => {
   if (s.includes('CapacitorFirebaseAuthentication/Google')) return s;
   return s.replace(/(target 'App' do\s*\n\s*capacitor_pods)/, `$1\n  pod 'CapacitorFirebaseAuthentication/Google', :path => '../../node_modules/@capacitor-firebase/authentication'`);
