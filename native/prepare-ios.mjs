@@ -61,6 +61,8 @@ if (!existsSync(ent)) {
 edit('App.xcodeproj/project.pbxproj', (s) => {
   if (!s.includes('CODE_SIGN_ENTITLEMENTS')) s = s.replace(/(PRODUCT_BUNDLE_IDENTIFIER = [^;]+;)/g, '$1\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;');
   s = s.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${versionName};`).replace(/CURRENT_PROJECT_VERSION = [^;]+;/g, `CURRENT_PROJECT_VERSION = ${buildNumber};`);
+  // iPhone בלבד (בלי iPad) — חוסך צילומי מסך ל-iPad בחנות; באייפד האפליקציה עדיין ניתנת להתקנה במצב תאימות
+  s = s.replace(/TARGETED_DEVICE_FAMILY = [^;]+;/g, 'TARGETED_DEVICE_FAMILY = 1;');
   // 3b) GoogleService-Info.plist חייב להיכלל ב-bundle (Firebase Auth), אז מוסיפים אותו לפרויקט: קובץ + קבוצת App + שלב Resources
   if (reversedClientId && !s.includes('GoogleService-Info.plist')) {
     const fileRef = 'F1A0B2C3D4E5000000000001', buildFile = 'F1A0B2C3D4E5000000000002';
