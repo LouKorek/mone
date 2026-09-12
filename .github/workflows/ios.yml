@@ -48,7 +48,10 @@ jobs:
         run: npx cap add ios --packagemanager CocoaPods
 
       - name: Prepare iOS project
-        run: node native/prepare-ios.mjs
+        run: |
+          node native/prepare-ios.mjs
+          # ה-Podfile.lock שנוצר ב-cap add נועל גרסאות שלא מתאימות ל-GoogleSignIn — פותרים מחדש ב-cap sync
+          rm -f ios/App/Podfile.lock
         env:
           IOS_BUILD_NUMBER: ${{ github.run_number }}
 
