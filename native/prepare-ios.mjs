@@ -30,6 +30,10 @@ edit('App/Info.plist', (s) => {
   if (!s.includes('NSLocationWhenInUseUsageDescription')) add += `
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>מונה משתמשת במיקום כדי למדוד את מרחק הנסיעה ולהציג את המסלול על המפה בזמן הנסיעה.</string>`;
+  // Apple מזהירה (ITMS-90683) אם חסר גם המפתח הזה, למרות שמבקשים מיקום רק בזמן שימוש
+  if (!s.includes('NSLocationAlwaysAndWhenInUseUsageDescription')) add += `
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>מונה משתמשת במיקום כדי למדוד את מרחק הנסיעה ולהציג את המסלול על המפה בזמן הנסיעה.</string>`;
   if (!s.includes('ITSAppUsesNonExemptEncryption')) add += `
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>`;
