@@ -19,16 +19,33 @@ let fb = null;           // { auth, db, mods }
 let userListeners = [];
 let currentUser = null;
 
-export async function initCloud() {
-  if (fb) return fb;
-  const [app, auth, fs] = await Promise.all([import(CDN('app')), import(CDN('auth')), import(CDN('firestore'))]);
+let initPromise = null;
+const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error(what + ' timeout'), { code: 'cloud/timeout' })), ms))]);
+export function initCloud() {
+  if (fb) return Promise.resolve(fb);
+  // כישלון (אין רשת / timeout) לא "נתקע" לתמיד — הניסיון הבא יטען מחדש
+  if (!initPromise) initPromise = doInit().catch((e) => { initPromise = null; throw e; });
+  return initPromise;
+}
+async function doInit() {
+  const [app, auth, fs] = await withTimeout(Promise.all([import(CDN('app')), import(CDN('auth')), import(CDN('firestore'))]), 20000, 'firebase load');
   const a = app.initializeApp(FIREBASE_CONFIG);
-  const authInst = auth.getAuth(a);
-  await auth.setPersistence(authInst, auth.browserLocalPersistence).catch(() => {});
-  fb = { auth: authInst, db: fs.getFirestore(a), A: auth, F: fs };
-  auth.onAuthStateChanged(authInst, (u) => { currentUser = u; userListeners.forEach(f => f(u)); });
-  try { const r = await auth.getRedirectResult(authInst); if (r?.user) { currentUser = r.user; fb.redirected = true; } }
-  catch (e) { console.warn('redirect', e.code); fb.redirectError = e; }
+  let authInst;
+  if (isNative()) {
+    // אפליקציה מותקנת (capacitor://): בלי popup/redirect resolver — ה-iframe של gapi לא נטען ב-WKWebView
+    // ו-getAuth/getRedirectResult נתקעים. ההתחברות ב-native היא דרך הפלאגין + signInWithCredential.
+    authInst = auth.initializeAuth(a, { persistence: [auth.indexedDBLocalPersistence, auth.browserLocalPersistence] });
+  } else {
+    authInst = auth.getAuth(a);
+    await auth.setPersistence(authInst, auth.browserLocalPersistence).catch(() => {});
+  }
+  const f = { auth: authInst, db: fs.getFirestore(a), A: auth, F: fs };
+  auth.onAuthStateChanged(authInst, (u) => { currentUser = u; userListeners.forEach(fn => fn(u)); });
+  if (!isNative()) {
+    try { const r = await withTimeout(auth.getRedirectResult(authInst), 15000, 'redirect'); if (r?.user) { currentUser = r.user; f.redirected = true; } }
+    catch (e) { console.warn('redirect', e.code); if (e.code !== 'cloud/timeout') f.redirectError = e; }
+  }
+  fb = f;
   return fb;
 }
 // האם הטעינה הנוכחית היא חזרה מהתחברות Google ב-redirect (כדי להראות אישור למשתמש)

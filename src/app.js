@@ -441,17 +441,34 @@ async function syncRides() {
     renderRides();
   } catch (e) { console.warn('sync', e); }
 }
-initCloud().then(() => {
-  cloudReady = true;
-  onUser((u) => { renderAccountRow(); if (u) syncRides(); });
-  const r = redirectOutcome();          // חזרה מהתחברות Google (אפליקציה מותקנת)
-  if (r.user) { greet(r.user); showView('more'); }
-  else if (r.error) { showView('more'); openSheet('ההתחברות לא הושלמה', `<p class="err">${esc(errorHe(r.error))}</p><p class="note">נסה שוב, או התחבר באימייל.</p>`); }
-}).catch(() => { $('accountSub').textContent = 'אין חיבור לאינטרנט — הנסיעות נשמרות במכשיר'; });
+function cloudUp() {
+  if (cloudReady) return Promise.resolve();
+  return initCloud().then(() => {
+    if (cloudReady) return;
+    cloudReady = true;
+    onUser((u) => { renderAccountRow(); if (u) syncRides(); });
+    const r = redirectOutcome();          // חזרה מהתחברות Google (אפליקציה מותקנת כ-PWA)
+    if (r.user) { greet(r.user); showView('more'); }
+    else if (r.error) { showView('more'); openSheet('ההתחברות לא הושלמה', `<p class="err">${esc(errorHe(r.error))}</p><p class="note">נסה שוב, או התחבר באימייל.</p>`); }
+  });
+}
+cloudUp().catch(() => { $('accountSub').textContent = 'אין חיבור לאינטרנט — הנסיעות נשמרות במכשיר'; });
 
-function openAccount() {
+let accountReq = 0;
+async function openAccount() {
+  if (!cloudReady) {
+    // עדיין נטען (או נכשל קודם) — מנסים שוב עכשיו במקום להציג הודעה סתמית
+    const my = ++accountReq;
+    openSheet('חשבון', '<p class="note">מתחבר לענן…</p>');
+    try { await cloudUp(); if (my !== accountReq || sheet.hidden) return; }
+    catch (e) {
+      if (my !== accountReq || sheet.hidden) return;
+      console.warn('cloud', e);
+      return openSheet('חשבון', `<p class="note">לא הצלחנו להתחבר לענן${navigator.onLine === false ? ' — אין חיבור לאינטרנט' : ''}. הנסיעות נשמרות בינתיים במכשיר.</p>
+        <div class="actions"><button class="btn ghost" id="aRetry" type="button">נסה שוב</button></div>`, (b) => { b.querySelector('#aRetry').onclick = () => openAccount(); });
+    }
+  }
   const u = getUser();
-  if (!cloudReady) return openSheet('חשבון', '<p class="note">החיבור לענן עדיין נטען, או שאין אינטרנט. הנסיעות נשמרות בינתיים במכשיר.</p>');
   if (u) return openProfile(u);
   openSheet('התחברות', `
     <button class="btn" id="aGoogle" type="button"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10c.8-2.3 3-4 5.6-4z"/></svg> המשך עם Google</button>
