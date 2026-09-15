@@ -25,12 +25,15 @@ jobs:
         with:
           node-version: 22
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      # ה-SDK של אנדרואיד כבר מותקן ב-ubuntu-latest (ANDROID_HOME מוגדר); android-actions/setup-android
+      # נשבר ב-15.9.2026 (sdkmanager נכשל על אישור רישיונות), אז מוותרים עליו ומאשרים רישיונות ישירות.
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Install
         run: npm install --no-audit --no-fund
