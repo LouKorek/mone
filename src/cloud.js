@@ -104,16 +104,27 @@ export async function signInApple() {
 export async function signOut() { const { A, auth } = await initCloud(); await A.signOut(auth); if (isNative()) await nativeSignOut(); }
 
 // ---- נסיעות בענן: users/{uid}/rides/{id} ----
+// Firestore לא תומך במערכים מקוננים ([[lat,lon],...]) וגם לא בערכי undefined — לכן המסלול נשמר כמחרוזת
+// "lat,lon;lat,lon" ושדות ריקים מושמטים. בלי זה שמירת נסיעה עם מסלול GPS נכשלת בשקט.
+const encTrack = (t) => Array.isArray(t) ? t.map(([a, b]) => `${Number(a).toFixed(5)},${Number(b).toFixed(5)}`).join(';') : '';
+const decTrack = (s) => typeof s === 'string' && s ? s.split(';').map(p => p.split(',').map(Number)).filter(p => p.length === 2 && p.every(Number.isFinite)) : (Array.isArray(s) ? s : []);
+const toDoc = (r) => {
+  const d = { ...r, track: encTrack(r.track), updatedAt: Date.now() };
+  Object.keys(d).forEach(k => { if (d[k] === undefined) delete d[k]; });
+  return d;
+};
 export async function pushRides(rides) {
   const { F, db } = await initCloud(); const u = currentUser; if (!u) return;
-  const batch = F.writeBatch(db);
-  rides.forEach(r => batch.set(F.doc(db, 'users', u.uid, 'rides', String(r.id)), { ...r, updatedAt: Date.now() }, { merge: true }));
-  await batch.commit();
+  for (let i = 0; i < rides.length; i += 400) {          // מגבלת Firestore: 500 פעולות ל-batch
+    const batch = F.writeBatch(db);
+    rides.slice(i, i + 400).forEach(r => batch.set(F.doc(db, 'users', u.uid, 'rides', String(r.id)), toDoc(r), { merge: true }));
+    await batch.commit();
+  }
 }
 export async function pullRides() {
   const { F, db } = await initCloud(); const u = currentUser; if (!u) return [];
   const snap = await F.getDocs(F.query(F.collection(db, 'users', u.uid, 'rides'), F.orderBy('at', 'desc'), F.limit(200)));
-  return snap.docs.map(d => d.data());
+  return snap.docs.map(d => { const r = d.data(); delete r.updatedAt; return { ...r, track: decTrack(r.track) }; });
 }
 export async function deleteRideCloud(id) {
   const { F, db } = await initCloud(); const u = currentUser; if (!u) return;
@@ -137,7 +148,8 @@ export async function deleteAccount(password) {
   };
   const wipe = async () => {
     const snap = await F.getDocs(F.collection(db, 'users', u.uid, 'rides'));
-    const batch = F.writeBatch(db); snap.docs.forEach(d => batch.delete(d.ref)); batch.delete(F.doc(db, 'users', u.uid)); await batch.commit();
+    const refs = [...snap.docs.map(d => d.ref), F.doc(db, 'users', u.uid)];
+    for (let i = 0; i < refs.length; i += 400) { const batch = F.writeBatch(db); refs.slice(i, i + 400).forEach(r => batch.delete(r)); await batch.commit(); }
   };
   try { await wipe(); await A.deleteUser(u); }
   catch (e) {

@@ -13,7 +13,8 @@ let app = read('./src/app.js').replace(/^import .*$/gm, '');
 const css = read('./src/styles.css');
 // מזהה גרסה: hash של כל המקור — משתנה בכל שינוי, ומשמש את ה-Service Worker לרענון המטמון
 const BUILD = createHash('sha1').update(tariffs + hebcal + engine + native + cloud + legal + app + css + read('./index.html')).digest('hex').slice(0, 10);
-app = app.replace("'__BUILD__'", `'${BUILD}'`);
+const VERSION = JSON.parse(read('./package.json')).version;
+app = app.replace("'__BUILD__'", `'${BUILD}'`).replace("'__VERSION__'", `'${VERSION}'`);
 const js = `const tariffs = ${tariffs.trim()};\n${hebcal}\n${engine}\n${native}\n${cloud}\n${legal}\n${app}`;
 
 let html = read('./index.html')

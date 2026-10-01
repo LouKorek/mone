@@ -6,6 +6,9 @@ import { isNative, platform, geoWatch, geoOnce, geoClear, keepAwake, shareImage,
 
 loadTariffs(tariffs);
 const BUILD = '__BUILD__';   // מוחלף בזמן הבנייה (build.mjs)
+const VERSION = '__VERSION__'; // מוחלף בזמן הבנייה מ-package.json
+// חייב להיות מוגדר לפני כל שימוש (API_BASE למטה) — בקובץ המאוחד const לפני ההגדרה זורק ReferenceError
+const APP_URL = 'mone-taxi.netlify.app';
 
 const $ = (id) => document.getElementById(id);
 const nis = (n) => '₪ ' + Number(n).toFixed(2);
@@ -151,15 +154,15 @@ function setPlace(which, place) {
   inp.value = place ? place.label : inp.value;
   inp.closest('.field').classList.toggle('set', !!place);
 }
-function hideList() { $('rtList').hidden = true; $('rtList').innerHTML = ''; route.items = []; route.sel = -1; }
+function hideList() { $('rtList').hidden = true; $('rtList').innerHTML = ''; route.items = []; route.sel = -1; ['rtFrom', 'rtTo'].forEach(id => { $(id).setAttribute('aria-expanded', 'false'); $(id).removeAttribute('aria-activedescendant'); }); }
 function showList(items, which) {
   const list = $('rtList'); const inp = routeField(which);
   list.style.top = (inp.closest('.field').offsetTop + inp.closest('.field').offsetHeight + 4) + 'px';
   route.items = items; route.sel = -1;
   list.innerHTML = items.length
-    ? items.map((s, i) => `<button type="button" role="option" data-i="${i}"><b>${esc(s.main)}</b>${s.secondary ? `<small>${esc(s.secondary)}</small>` : ''}</button>`).join('')
+    ? items.map((s, i) => `<button type="button" role="option" id="rtOpt${i}" aria-selected="false" data-i="${i}"><b>${esc(s.main)}</b>${s.secondary ? `<small>${esc(s.secondary)}</small>` : ''}</button>`).join('')
     : '<div class="empty">לא נמצאו תוצאות — נסה כתובת מדויקת יותר</div>';
-  list.hidden = false;
+  list.hidden = false; inp.setAttribute('aria-expanded', 'true');
   list.querySelectorAll('button').forEach(b => b.addEventListener('mousedown', (e) => e.preventDefault()));   // לא לאבד פוקוס לפני הלחיצה
   list.querySelectorAll('button').forEach(b => b.addEventListener('click', () => pickSuggestion(which, items[Number(b.dataset.i)])));
 }
@@ -196,7 +199,10 @@ async function suggest(which) {
     else if (e.key === 'Escape') hideList();
   });
 });
-function markSel() { $('rtList').querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-selected', String(i === route.sel))); }
+function markSel() {
+  $('rtList').querySelectorAll('button').forEach((b, i) => { b.setAttribute('aria-selected', String(i === route.sel)); if (i === route.sel) b.scrollIntoView({ block: 'nearest' }); });
+  const inp = routeField(route.active || 'from'); if (route.sel >= 0) inp.setAttribute('aria-activedescendant', 'rtOpt' + route.sel); else inp.removeAttribute('aria-activedescendant');
+}
 
 $('rtGps').addEventListener('click', async () => {
   const btn = $('rtGps'); btn.classList.add('busy');
@@ -312,7 +318,8 @@ $('liveStop').addEventListener('click', stopRide);
 
 function startRide(resumed) {
   if (!live.meter) { live.meter = new LiveMeter(new Date(), live.opts); live.track = []; }
-  live.lastTickAt = Date.now(); live.lastFix = null; live.speed = null;
+  // שחזור אחרי שהאפליקציה נסגרה: המונה במונית לא עצר — מחייבים גם את הזמן שעבר מאז השמירה האחרונה
+  live.lastTickAt = resumed && live.savedAt ? Math.min(Date.now(), live.savedAt) : Date.now(); live.lastFix = null; live.speed = null;
   mapReset(); ensureMap(); if (gmap.map) setTimeout(() => gmap.map.invalidateSize(), 100);
   live.track.forEach((pt, i) => mapAddPoint(pt[0], pt[1], i > 0 ? bearing(live.track[i - 1], pt) : null));
   $('liveStart').hidden = true; $('liveStop').hidden = false;
@@ -325,7 +332,7 @@ function onTimer() {
   const now = Date.now();
   live.meter.tick(new Date(now), (now - live.lastTickAt) / 1000, 0);
   live.lastTickAt = now;
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ meter: live.meter.toJSON(), opts: live.opts, track: live.track })); } catch (e) { /* */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ meter: live.meter.toJSON(), opts: live.opts, track: live.track.length > 3000 ? compactTrack(live.track) : live.track, savedAt: now })); } catch (e) { /* */ }
   renderMeter();
 }
 async function startGps() {
@@ -386,13 +393,13 @@ function stopRide() {
   $('livePrice').classList.remove('running'); $('liveStop').hidden = true; $('meterGps').textContent = 'GPS כבוי';
   mapFinish(live.track);
   const fare = live.meter.snapshot();
-  const ride = { id: Date.now(), at: live.meter.start.toISOString(), end: new Date().toISOString(), km: fare.km, minutes: fare.minutes, total: fare.total, cashTotal: fare.cashTotal, tariffLabel: fare.tariffLabel, dayLabel: fare.dayLabel, period: fare.period, lines: fare.lines, opts: { ...live.meter.opts }, track: live.track, asked: null };
+  const ride = { id: Date.now(), at: live.meter.start.toISOString(), end: new Date().toISOString(), km: fare.km, minutes: fare.minutes, total: fare.total, cashTotal: fare.cashTotal, tariffLabel: fare.tariffLabel, dayLabel: fare.dayLabel, period: fare.period, lines: fare.lines, opts: { ...live.meter.opts }, track: compactTrack(live.track), asked: null };
   saveRide(ride);
   renderMeter();
   openRideSheet(ride, true);
 }
 function resetRide() {
-  live.meter = null; live.speed = null; live.lastFix = null; live.track = [];
+  live.meter = null; live.speed = null; live.lastFix = null; live.track = []; live.savedAt = null;
   mapReset(); if (gmap.map) { gmap.map.remove(); gmap.map = null; $('mapEmpty').hidden = false; }
   $('liveStart').hidden = false; $('mapEmpty').textContent = 'המפה תופיע כאן בזמן הנסיעה';
   renderMeter();
@@ -403,7 +410,7 @@ function resetRide() {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (!saved) return;
     if (Date.now() - new Date(saved.meter.start).getTime() > 6 * 3600000) { localStorage.removeItem(STORE_KEY); return; }
-    live.meter = LiveMeter.fromJSON(saved.meter); Object.assign(live.opts, saved.opts); live.track = saved.track || [];
+    live.meter = LiveMeter.fromJSON(saved.meter); Object.assign(live.opts, saved.opts); live.track = saved.track || []; live.savedAt = saved.savedAt || null;
     renderTiles($('liveTiles'), live.opts, live.meter.period, () => { Object.assign(live.meter.opts, live.opts); renderMeter(); });
     showView('live'); startRide(true);
   } catch (e) { /* */ }
@@ -413,13 +420,29 @@ renderMeter();
 // ============ נסיעות ============
 const HIST_KEY = 'mone.history';
 const loadRides = () => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) { return []; } };
-const storeRides = (list) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 100))); } catch (e) { /* */ } };
+// שמירה עם הגנה ממכסת האחסון (~5MB): אם אין מקום — מוותרים על מסלולי ה-GPS של הנסיעות הישנות ומנסים שוב
+const storeRides = (list) => {
+  list = list.slice(0, 100);
+  for (let keepTracks = list.length; keepTracks >= 0; keepTracks = keepTracks > 10 ? Math.floor(keepTracks / 2) : keepTracks - 1) {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(keepTracks >= list.length ? list : list.map((r, i) => i < keepTracks ? r : { ...r, track: [] }))); return true; }
+    catch (e) { if (e.name !== 'QuotaExceededError' && e.code !== 22) return false; }
+  }
+  return false;
+};
+// מסלול לשמירה: נקודה כל ~15 מ' לכל היותר, עד 2,000 נקודות, 5 ספרות אחרי הנקודה (~1 מ')
+function compactTrack(track) {
+  const out = [];
+  for (const p of track) { const last = out[out.length - 1]; if (!last || haversine(last[0], last[1], p[0], p[1]) >= 15) out.push([+p[0].toFixed(5), +p[1].toFixed(5)]); }
+  if (track.length > 1) { const end = track[track.length - 1]; const last = out[out.length - 1]; if (last[0] !== +end[0].toFixed(5) || last[1] !== +end[1].toFixed(5)) out.push([+end[0].toFixed(5), +end[1].toFixed(5)]); }
+  if (out.length <= 2000) return out;
+  const step = out.length / 2000; return Array.from({ length: 2000 }, (_, i) => out[Math.min(out.length - 1, Math.round(i * step))]).concat([out[out.length - 1]]);
+}
 function saveRide(ride) { const list = loadRides(); list.unshift(ride); storeRides(list); if (getUser()) pushRides([ride]).catch(() => {}); }
 function updateRide(ride) { const list = loadRides(); const i = list.findIndex(r => r.id === ride.id); if (i >= 0) list[i] = ride; storeRides(list); if (getUser()) pushRides([ride]).catch(() => {}); }
 function renderRides() {
   const list = loadRides();
   $('ridesEmpty').hidden = list.length > 0;
-  $('ridesList').innerHTML = list.slice(0, 7).map(r => {
+  $('ridesList').innerHTML = list.map(r => {
     const d = new Date(r.at);
     return `<button type="button" class="ride" data-id="${r.id}"><span class="meta"><b>${fmtDT(d)}</b><span>${r.km.toFixed(1)} ק"מ · ${Math.round(r.minutes)} דק' · ${esc(r.tariffLabel)}</span></span><span class="amt">${nis(r.total)}</span></button>`;
   }).join('');
@@ -445,7 +468,6 @@ function openRideSheet(ride, justEnded) {
 
 
 // ============ קבלה בפורמט מונה ============
-const APP_URL = 'mone-taxi.netlify.app';
 function receiptLines(ride) {
   const start = new Date(ride.at), end = ride.end ? new Date(ride.end) : null;
   const hm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -691,7 +713,7 @@ const FACTS = [
   ['הדרך הקצרה, והיעד שאתה בוחר', 'הנהג חייב לנסוע בדרך הקצרה ביותר בנסיבות, ולכבד מסלול שביקשת. אפשר לשנות יעד תוך כדי נסיעה.', 'תקנה 503'],
   ['אסור לסרב', 'הנהג חייב להסיע כל נוסע ומטענו לכל יעד, אלא מסיבה סבירה. אסור להתנות בנסיעה ארוכה או במחיר.', 'תקנה 501'],
   ['המונה חייב להיות גלוי', 'צג המונה חייב להיות גלוי לנוסעים מכל המושבים, כל הנסיעה.', 'תקנה 509(ב)'],
-  ['קבלה', 'בקש קבלה מודפסת מהמונה — היא הבסיס לכל תלונה. באפליקציה הזו תוכל להפיק "קבלה" משלך להשוואה (בשלב הבא).', ''],
+  ['קבלה', 'בקש קבלה מודפסת מהמונה — היא הבסיס לכל תלונה. ב"מונה" אפשר גם להפיק "קבלה" משלך להשוואה (נסיעות ← נסיעה ← קבלה לשיתוף).', ''],
   ['עישון ורדיו', 'אסור לנהג לעשן כשיש נוסעים; חייב להנמיך רדיו לפי בקשה.', 'משרד התחבורה — חובות הנהג'],
 ];
 function openRights() {
@@ -724,8 +746,8 @@ document.addEventListener('click', (e) => { const a = e.target.closest('a[data-d
 function openAbout() {
   openSheet('אודות', `<p>"מונה" מחשבת את המחיר המרבי החוקי של נסיעה במונית מיוחדת בישראל, לפי צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026 (ק"ת 12345), ולפי תקנות התעבורה.</p>
     <p class="note">החישוב הוא הערכה: המונה המכויל במונית הוא הקובע, ומדידת GPS יכולה לסטות בכמה אחוזים. התעריפים מתעדכנים כל 1 באפריל.</p>
-    <p class="note">מקורות: <a href="https://www.gov.il/he/pages/taxi-rate-2026" target="_blank" rel="noopener">משרד התחבורה — תעריפי מוניות 2026</a> · <a href="https://he.wikisource.org/wiki/צו_פיקוח_על_מחירי_מצרכים_ושירותים_(מחירי_נסיעה_במוניות)" target="_blank" rel="noopener">נוסח הצו</a> · <a href="https://www.kolzchut.org.il/he/זכותון_נסיעה_במונית_מיוחדת_(ספיישל)" target="_blank" rel="noopener">כל-זכות</a></p>
-    <p class="note">גרסה 0.9.1 (${BUILD === '__BUILD__' ? 'dev' : BUILD}) · לו קורק · lou.korek@gmail.com · <a href="#" data-doc="terms">תנאי שימוש</a> · <a href="#" data-doc="privacy">פרטיות</a> · <a href="#" data-doc="accessibility">נגישות</a></p>
+    <p class="note">"מונה" אינה אפליקציה ממשלתית ואינה קשורה למשרד התחבורה או לכל גוף ממשלתי. מקורות רשמיים: <a href="https://www.gov.il/he/pages/taxi-rate-2026" target="_blank" rel="noopener">משרד התחבורה — תעריפי מוניות 2026</a> · <a href="https://www.gov.il/he/pages/taxi_driver_and_passenger_information" target="_blank" rel="noopener">משרד התחבורה — מידע לנהג ולנוסע במונית</a></p>
+    <p class="note">גרסה ${VERSION === '__VERSION__' ? 'dev' : VERSION} (${BUILD === '__BUILD__' ? 'dev' : BUILD}) · לו קורק · lou.korek@gmail.com · <a href="#" data-doc="terms">תנאי שימוש</a> · <a href="#" data-doc="privacy">פרטיות</a> · <a href="#" data-doc="accessibility">נגישות</a></p>
     <div class="actions"><button class="btn ghost" id="chkUpd" type="button">בדוק עדכון</button></div>`, (b) => {
     b.querySelector('#chkUpd').onclick = async () => {
       const reg = await navigator.serviceWorker?.getRegistration();

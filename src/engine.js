@@ -22,11 +22,11 @@ export function activePeriod(date) {
 const restMap = buildRestDayMap(2020, 2060); // ימי מנוחה (ללא שבתות) לפי הלוח העברי
 
 // "יום תעריף" מתחיל ב-06:00. מחזיר את התאריך הלועזי שבו התחיל היום, ואת דקות-היום מ-06:00.
+// לפי שעון הקיר המקומי (לא חיסור 6 שעות מוחלטות) — כך שבימי מעבר שעון קיץ/חורף השעות 06:00–07:00 מסווגות נכון.
 export function tariffDayOf(date) {
-  const shifted = new Date(date.getTime() - 6 * 3600000);
-  const day = new Date(shifted.getFullYear(), shifted.getMonth(), shifted.getDate());
-  const minutesFrom6 = shifted.getHours() * 60 + shifted.getMinutes();
-  return { day, minutesFrom6 };
+  const h = date.getHours(), m = date.getMinutes();
+  if (h >= 6) return { day: new Date(date.getFullYear(), date.getMonth(), date.getDate()), minutesFrom6: (h - 6) * 60 + m };
+  return { day: new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1), minutesFrom6: (h + 18) * 60 + m };
 }
 
 export function dayKind(day) {
@@ -80,7 +80,6 @@ const round2 = (x) => Math.round(x * 100) / 100;
  * @param {boolean} [ride.eilat]     נסיעה באזור אילת (ללא מע"מ)
  */
 export function computeFare(ride) {
-  const T = getTariffs();
   const period = activePeriod(ride.start);
   const minutes = Math.max(0, Number(ride.minutes) || 0);
   const km = Math.max(0, Number(ride.km) || 0);
@@ -141,7 +140,7 @@ function summarize(period, byTariff, opts, dayLabel) {
     tariffLabel: tariffsUsed.map(t => TARIFF_NAMES[t]).join(' + '),
     dayLabel,
     period: period.name,
-    cashTotal: Math.round(total * 10) / 10,   // עיגול ל-10 אגורות בתשלום במזומן
+    cashTotal: Math.round(round2(total) * 10 + 1e-9) / 10,   // עיגול ל-10 אגורות בתשלום במזומן (5 אגורות ומעלה – כלפי מעלה)
   };
 }
 
