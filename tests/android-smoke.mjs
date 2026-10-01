@@ -50,8 +50,13 @@ const evaluate = (expression) => new Promise((res) => {
 });
 
 // מחכים לסיום הטעינה
-for (let i = 0; i < 20; i++) { if (await evaluate(`document.readyState === 'complete' && !!document.querySelector('#calcTotal')`) === true) break; await sleep(1000); }
-await sleep(3000);
+const waitLoad = async () => { for (let i = 0; i < 20; i++) { if (await evaluate(`document.readyState === 'complete' && !!document.querySelector('#calcTotal')`) === true) break; await sleep(1000); } await sleep(3000); };
+await waitLoad();
+// השפה נבחרת לפי שפת המכשיר (באמולטור: אנגלית). בודקים שהתרגום עובד, ואז עוברים לעברית לשאר הבדיקות.
+const first = await evaluate(`({ lang: document.documentElement.lang, dir: document.documentElement.dir, calcTab: document.querySelector('[data-view=calc]')?.textContent.trim() })`);
+console.log('שפה בהפעלה ראשונה:', JSON.stringify(first));
+check('שפת הממשק נקבעה (he/en/ru/ar) והכיוון תואם', ['he', 'en', 'ru', 'ar'].includes(first.lang) && first.dir === (['he', 'ar'].includes(first.lang) ? 'rtl' : 'ltr'), JSON.stringify(first));
+if (first.lang !== 'he') { await evaluate(`localStorage.setItem('mone.lang', 'he'); setTimeout(() => location.reload(), 50); true`); await sleep(1500); await waitLoad(); }
 
 const r = await evaluate(`(async () => {
   const out = {};
@@ -74,6 +79,10 @@ const r = await evaluate(`(async () => {
   document.querySelector('[data-sheet=tariffs]').click();
   out.tariffsSheet = !document.getElementById('sheet').hidden && document.getElementById('sheetTitle').textContent;
   document.getElementById('sheetClose').click();
+  document.querySelector('[data-sheet=language]').click();
+  out.langSheet = !document.getElementById('sheet').hidden && document.querySelectorAll('#sheetBody .langs button').length;
+  document.getElementById('sheetClose').click();
+  out.htmlDir = document.documentElement.dir;
   return out;
 })()`);
 console.log(JSON.stringify(r, null, 2));
@@ -89,6 +98,8 @@ check('KeepAwake', !/^ERROR/.test(String(r['KeepAwake.isSupported'])), String(r[
 check('FirebaseAuthentication (Firebase native אחרי R8)', !/^ERROR/.test(String(r['FirebaseAuthentication.getCurrentUser'])), String(r['FirebaseAuthentication.getCurrentUser']));
 check('המחשבון מחשב (5 ק"מ, 15 דק\', ראשון 10:00 = ₪ 51.40)', r.calcTotal === '₪ 51.40', r.calcTotal);
 check('"התעריפים הנוכחיים" נפתח', r.tariffsSheet === 'התעריפים הנוכחיים', String(r.tariffsSheet));
+check('בחירת שפה נפתחת עם 4 שפות', r.langSheet === 4, String(r.langSheet));
+check('כיוון עברית (rtl) כברירת מחדל', r.htmlDir === 'rtl', String(r.htmlDir));
 
 ws.close();
 const log = adb('logcat', '-d', '-b', 'crash');

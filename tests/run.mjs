@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { loadTariffs, tariffAt, computeFare, LiveMeter } from '../src/engine.js';
+import { I18N } from '../src/i18n-data.js';
+import { KEYS } from './i18n-keys.mjs';
+import { detectSurcharges, SurchargeDetector, airportAt, decodePolyline } from '../src/geo.js';
 
 loadTariffs(JSON.parse(readFileSync(new URL('../src/data/tariffs.json', import.meta.url), 'utf8')));
 
@@ -65,6 +68,35 @@ ok('עיגול למזומן', computeFare({ start: d('2026-09-06T10:00'), minute
 const m = new LiveMeter(d('2026-09-06T10:00'), { order: true });
 for (let s = 0; s < 1200; s++) m.tick(new Date(d('2026-09-06T10:00').getTime() + s * 1000), 1, 30000 / 3600);
 ok('מונה חי 10 ק"מ 20 דק', m.snapshot().total, computeFare({ start: d('2026-09-06T10:00'), minutes: 20, km: 10, order: true }).total);
+
+// ---- זיהוי תוספות לפי מיקום (geo.js) ----
+const line = (a, b, n) => Array.from({ length: n + 1 }, (_, i) => [a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n]);
+ok('נתב"ג – טרמינל 3', airportAt(32.0005, 34.8694), 'ben-gurion');
+ok('נתב"ג – טרמינל 1', airportAt(31.9944, 34.8966), 'ben-gurion');
+ok('רמון', airportAt(29.7252, 35.0055), 'ramon');
+ok('חיפה', airportAt(32.8117, 35.0396), 'haifa');
+ok('תל אביב – לא שדה תעופה', airportAt(32.08, 34.78), null);
+ok('איירפורט סיטי – לא שדה תעופה', airportAt(31.9935, 34.9110), null);
+// כביש 6 בין מחלף כסם (32.10,34.936) לעיינות, לאורך הקו
+{ const r = detectSurcharges(line([32.0777, 34.9328], [32.1107, 34.9363], 60)); ok('כביש 6 – 3.7 ק"מ', r.road6, true); ok('כביש 6 – לא קטע 18', r.segment18, false); }
+{ const r = detectSurcharges(line([32.5096, 35.0274], [32.5338, 35.0269], 40)); ok('קטע 18', r.segment18, true); ok('קטע 18 – לא כביש 6', r.road6, false); }
+{ const r = detectSurcharges(line([32.0777, 34.9328], [32.0870, 34.9338], 20)); ok('כביש 6 – רק 1 ק"מ לא מספיק', r.road6, false); }
+// כביש 4 מקביל (כ-10 ק"מ מערבית) – לא כביש 6
+{ const r = detectSurcharges(line([32.08, 34.83], [32.14, 34.84], 60)); ok('כביש מקביל – לא כביש 6', r.road6, false); }
+// מנהרות הכרמל: בתוך המנהרה אין GPS – קפיצה מהפורטל המזרחי לפורטל המערבי = שני קטעים
+{ const d = new SurchargeDetector(); d.feed(32.7925, 35.0300); d.feed(32.7899, 35.0262); const r = d.feed(32.7927, 34.9605); ok('כרמל – שני קטעים (קפיצה)', r.carmel, 2); }
+{ const d = new SurchargeDetector(); d.feed(32.7899, 35.0262); const r = d.feed(32.7908, 35.0030); ok('כרמל – קטע מזרחי בלבד', r.carmel, 1); }
+{ const r = detectSurcharges(line([32.7910, 35.0010], [32.7926, 34.9620], 30)); ok('כרמל – קטע מערבי (רציף)', r.carmel, 1); }
+{ const r = detectSurcharges(line([32.80, 35.00], [32.82, 35.02], 30)); ok('חיפה – רחובות, לא מנהרות', r.carmel, 0); }
+ok('פענוח polyline', JSON.stringify(decodePolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@')), JSON.stringify([[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]]));
+
+// ---- תרגומים: לכל מחרוזת בממשק יש תרגום בכל שפה, עם אותם משתנים {x} ----
+for (const lang of ['en', 'ru', 'ar']) {
+  const miss = KEYS.filter((k) => !(k in I18N[lang]));
+  ok(`תרגום ${lang} – מחרוזות חסרות`, miss.length ? miss.slice(0, 5).join(' | ') : '', '');
+  const bad = KEYS.filter((k) => k in I18N[lang] && JSON.stringify((k.match(/\{\w+\}/g) || []).sort()) !== JSON.stringify((I18N[lang][k].match(/\{\w+\}/g) || []).sort()));
+  ok(`תרגום ${lang} – משתנים`, bad.join(' | '), '');
+}
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

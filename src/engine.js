@@ -111,22 +111,24 @@ function summarize(period, byTariff, opts, dayLabel) {
   for (const t of tariffsUsed) {
     const b = byTariff[t];
     const suffix = tariffsUsed.length > 1 ? ` (${TARIFF_NAMES[t]})` : '';
-    if (b.minutes > 0) { const a = b.minutes * period.per_min[t]; subtotal += a; lines.push({ key: 'time', label: `${fmt(b.minutes)} דק' × ${period.per_min[t].toFixed(2)}${suffix}`, amount: a }); }
-    if (b.kmUpto10 > 0) { const a = b.kmUpto10 * period.per_km_upto10[t]; subtotal += a; lines.push({ key: 'km', label: `${fmt(b.kmUpto10)} ק"מ × ${period.per_km_upto10[t].toFixed(2)}${suffix}`, amount: a }); }
-    if (b.kmOver10 > 0) { const a = b.kmOver10 * period.per_km_over10[t]; subtotal += a; lines.push({ key: 'km10', label: `${fmt(b.kmOver10)} ק"מ מעל 10 × ${period.per_km_over10[t].toFixed(2)}${suffix}`, amount: a }); }
+    // label בעברית נשמר לתאימות לנסיעות ישנות; הממשק בונה תווית בשפת המשתמש מ-key/qty/rate/tariff
+    const tv = tariffsUsed.length > 1 ? t : null;
+    if (b.minutes > 0) { const a = b.minutes * period.per_min[t]; subtotal += a; lines.push({ key: 'time', qty: b.minutes, rate: period.per_min[t], tariff: tv, label: `${fmt(b.minutes)} דק' × ${period.per_min[t].toFixed(2)}${suffix}`, amount: a }); }
+    if (b.kmUpto10 > 0) { const a = b.kmUpto10 * period.per_km_upto10[t]; subtotal += a; lines.push({ key: 'km', qty: b.kmUpto10, rate: period.per_km_upto10[t], tariff: tv, label: `${fmt(b.kmUpto10)} ק"מ × ${period.per_km_upto10[t].toFixed(2)}${suffix}`, amount: a }); }
+    if (b.kmOver10 > 0) { const a = b.kmOver10 * period.per_km_over10[t]; subtotal += a; lines.push({ key: 'km10', qty: b.kmOver10, rate: period.per_km_over10[t], tariff: tv, label: `${fmt(b.kmOver10)} ק"מ מעל 10 × ${period.per_km_over10[t].toFixed(2)}${suffix}`, amount: a }); }
   }
-  const add = (cond, key, label, amount) => { if (cond && amount) { subtotal += amount; lines.push({ key, label, amount }); } };
+  const add = (cond, key, label, amount, extra) => { if (cond && amount) { subtotal += amount; lines.push({ key, label, amount, ...extra }); } };
   add(opts.order, 'order', 'הזמנת מונית', period.order_surcharge);
-  add(opts.airport === 'ben-gurion', 'airport', 'יציאה מנתב"ג', T.surcharges.ben_gurion);
-  add(opts.airport === 'ramon' || opts.airport === 'haifa', 'airport', 'יציאה משדה תעופה רמון/חיפה', T.surcharges.ramon_or_haifa_airport);
+  add(opts.airport === 'ben-gurion', 'airport', 'יציאה מנתב"ג', T.surcharges.ben_gurion, { which: 'ben-gurion' });
+  add(opts.airport === 'ramon' || opts.airport === 'haifa', 'airport', 'יציאה משדה תעופה רמון/חיפה', T.surcharges.ramon_or_haifa_airport, { which: 'ramon' });
   add(opts.road6, 'road6', 'כביש 6', T.surcharges.road6_main);
   add(opts.segment18, 'seg18', 'כביש 6 – קטע 18', T.surcharges.road6_segment18);
-  add(opts.carmel === 1, 'carmel', 'מנהרות הכרמל – קטע אחד', T.surcharges.carmel_tunnels_one);
-  add(opts.carmel === 2, 'carmel', 'מנהרות הכרמל – שני קטעים', T.surcharges.carmel_tunnels_two);
+  add(opts.carmel === 1, 'carmel', 'מנהרות הכרמל – קטע אחד', T.surcharges.carmel_tunnels_one, { n: 1 });
+  add(opts.carmel === 2, 'carmel', 'מנהרות הכרמל – שני קטעים', T.surcharges.carmel_tunnels_two, { n: 2 });
 
   const vatRate = opts.eilat ? T.eilat_vat : T.vat;
   const vat = subtotal * vatRate;
-  if (vatRate > 0) lines.push({ key: 'vat', label: `מע"מ ${Math.round(vatRate * 100)}%`, amount: vat });
+  if (vatRate > 0) lines.push({ key: 'vat', rate: vatRate, label: `מע"מ ${Math.round(vatRate * 100)}%`, amount: vat });
   let total = subtotal + vat;
   const fastLane = Number(opts.fastLane) || 0;
   if (fastLane > 0) { lines.push({ key: 'fastlane', label: 'נתיב מהיר (לפי השלט)', amount: fastLane }); total += fastLane; }

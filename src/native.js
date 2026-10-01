@@ -59,6 +59,14 @@ export async function shareImage(blob, fileName, title, text) {
   return true;
 }
 
+// ---- שיתוף טקסט (חלוקת נסיעה) ----
+export async function shareText(title, text) {
+  const S = isNative() && P('Share');
+  if (!S) return false;
+  await S.share({ title, text, dialogTitle: title });
+  return true;
+}
+
 // ---- התחברות: Google/Apple דרך המערכת, ואז Firebase JS SDK עם ה-credential ----
 export async function nativeGoogleCredential() {
   const A = P('FirebaseAuthentication'); if (!A) throw Object.assign(new Error('no plugin'), { code: 'native/no-plugin' });

@@ -29,17 +29,17 @@ edit('App/Info.plist', (s) => {
   let add = '';
   if (!s.includes('NSLocationWhenInUseUsageDescription')) add += `
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>מונה משתמשת במיקום כדי למדוד את מרחק הנסיעה ולהציג את המסלול על המפה בזמן הנסיעה, וכדי למלא את נקודת המוצא במחשבון כשתבקש.</string>`;
+	<string>מונה משתמשת במיקום כדי למדוד את מרחק הנסיעה, להציג את המסלול על המפה ולזהות תוספות כמו יציאה מנתב״ג או כביש 6 בזמן הנסיעה, וכדי למלא את נקודת המוצא במחשבון כשתבקש.</string>`;
   // Apple מזהירה (ITMS-90683) אם חסר גם המפתח הזה, למרות שמבקשים מיקום רק בזמן שימוש
   if (!s.includes('NSLocationAlwaysAndWhenInUseUsageDescription')) add += `
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>מונה משתמשת במיקום כדי למדוד את מרחק הנסיעה ולהציג את המסלול על המפה בזמן הנסיעה, וכדי למלא את נקודת המוצא במחשבון כשתבקש.</string>`;
+	<string>מונה משתמשת במיקום כדי למדוד את מרחק הנסיעה, להציג את המסלול על המפה ולזהות תוספות כמו יציאה מנתב״ג או כביש 6 בזמן הנסיעה, וכדי למלא את נקודת המוצא במחשבון כשתבקש.</string>`;
   if (!s.includes('ITSAppUsesNonExemptEncryption')) add += `
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>`;
   if (!s.includes('CFBundleLocalizations')) add += `
 	<key>CFBundleLocalizations</key>
-	<array><string>he</string></array>`;
+	<array><string>he</string><string>en</string><string>ru</string><string>ar</string></array>`;
   if (reversedClientId && !s.includes(reversedClientId)) add += `
 	<key>CFBundleURLTypes</key>
 	<array><dict><key>CFBundleURLSchemes</key><array><string>${reversedClientId}</string></array></dict></array>`;
