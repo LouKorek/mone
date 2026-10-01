@@ -98,6 +98,9 @@ edit('app/proguard-rules.pro', (s) => {
 -if class androidx.credentials.CredentialManager
 -keep class androidx.credentials.playservices.** { *; }
 -dontwarn com.google.errorprone.annotations.**
+# ספקי התחברות אופציונליים של @capacitor-firebase/authentication שלא נכללים באפליקציה (רק Google ו-Apple)
+-dontwarn com.facebook.**
+-dontwarn com.google.android.gms.games.**
 `;
 });
 
