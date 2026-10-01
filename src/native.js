@@ -22,6 +22,19 @@ export async function geoWatch(onFix, onErr, opts) {
   });
   return { native: id };
 }
+// מיקום חד-פעמי (לנקודת מוצא במחשבון)
+export async function geoOnce(opts = {}) {
+  const G = isNative() && P('Geolocation');
+  if (G) {
+    try { const perm = await G.requestPermissions({ permissions: ['location'] }); if (perm.location === 'denied') throw Object.assign(new Error('denied'), { code: 1 }); } catch (e) { if (e.code === 1) throw e; }
+    const pos = await G.getCurrentPosition({ enableHighAccuracy: true, maximumAge: 15000, timeout: opts.timeout || 15000 });
+    return { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+  }
+  if (!('geolocation' in navigator)) throw Object.assign(new Error('unsupported'), { code: 2 });
+  return new Promise((res, rej) => navigator.geolocation.getCurrentPosition(
+    (pos) => res({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+    (err) => rej(err), { enableHighAccuracy: true, maximumAge: 15000, timeout: opts.timeout || 15000 }));
+}
 export async function geoClear(h) {
   if (!h) return;
   if (h.web != null) navigator.geolocation.clearWatch(h.web);

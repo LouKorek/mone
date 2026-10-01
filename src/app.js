@@ -2,7 +2,7 @@ import { loadTariffs, computeFare, tariffAt, activePeriod, getTariffs, TARIFF_NA
 import tariffs from './data/tariffs.json' with { type: 'json' };
 import { DOCS, docHtml } from './legal.js';
 import { initCloud, onUser, getUser, redirectOutcome, signInOrRegister, resetPassword, signInGoogle, signInApple, signOut, pushRides, pullRides, deleteRideCloud, deleteAccount, errorHe } from './cloud.js';
-import { isNative, platform, geoWatch, geoClear, keepAwake, shareImage, hasNativeApple, initNative } from './native.js';
+import { isNative, platform, geoWatch, geoOnce, geoClear, keepAwake, shareImage, hasNativeApple, initNative } from './native.js';
 
 loadTariffs(tariffs);
 const BUILD = '__BUILD__';   // מוחלף בזמן הבנייה (build.mjs)
@@ -129,6 +129,125 @@ function recalc() {
 }
 $('when').value = toLocalInputValue(new Date());
 recalc();
+
+// ============ מסלול: מוצא → יעד (Google Maps דרך הפונקציה שלנו ב-Netlify) ============
+// המפתח של Google נשאר בשרת (netlify/functions/maps.mjs). ק"מ ודקות מתמלאים מהמסלול ונשארים ניתנים לעריכה.
+const API_BASE = isNative() ? `https://${APP_URL}` : '';
+const route = { from: null, to: null, token: null, timer: null, active: null, req: 0, near: null, result: null, items: [], sel: -1 };
+const newToken = () => { route.token = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())).slice(0, 36); };
+newToken();
+async function mapsApi(path, body) {
+  const r = await fetch(`${API_BASE}/api/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.message || 'maps'), { code: data.error || r.status });
+  return data;
+}
+const routeErrHe = (e) => e.code === 'missing-key' ? 'שירות המסלולים עדיין לא הופעל' : e.code === 'no-route' ? 'לא נמצא מסלול נסיעה בין הנקודות' : (navigator.onLine === false || e.name === 'TypeError') ? 'אין חיבור לאינטרנט — הזן ק"מ ודקות ידנית' : 'חישוב המסלול נכשל, נסה שוב';
+
+function routeField(which) { return $(which === 'from' ? 'rtFrom' : 'rtTo'); }
+function setPlace(which, place) {
+  route[which] = place;
+  const inp = routeField(which);
+  inp.value = place ? place.label : inp.value;
+  inp.closest('.field').classList.toggle('set', !!place);
+}
+function hideList() { $('rtList').hidden = true; $('rtList').innerHTML = ''; route.items = []; route.sel = -1; }
+function showList(items, which) {
+  const list = $('rtList'); const inp = routeField(which);
+  list.style.top = (inp.closest('.field').offsetTop + inp.closest('.field').offsetHeight + 4) + 'px';
+  route.items = items; route.sel = -1;
+  list.innerHTML = items.length
+    ? items.map((s, i) => `<button type="button" role="option" data-i="${i}"><b>${esc(s.main)}</b>${s.secondary ? `<small>${esc(s.secondary)}</small>` : ''}</button>`).join('')
+    : '<div class="empty">לא נמצאו תוצאות — נסה כתובת מדויקת יותר</div>';
+  list.hidden = false;
+  list.querySelectorAll('button').forEach(b => b.addEventListener('mousedown', (e) => e.preventDefault()));   // לא לאבד פוקוס לפני הלחיצה
+  list.querySelectorAll('button').forEach(b => b.addEventListener('click', () => pickSuggestion(which, items[Number(b.dataset.i)])));
+}
+function pickSuggestion(which, s) {
+  if (!s) return;
+  setPlace(which, { label: s.secondary ? `${s.main}, ${s.secondary}` : s.main, placeId: s.placeId });
+  hideList(); newToken();
+  if (which === 'from' && !route.to) $('rtTo').focus(); else routeField(which).blur();
+  computeRoute();
+}
+async function suggest(which) {
+  const q = routeField(which).value.trim();
+  if (q.length < 2) return hideList();
+  const my = ++route.req;
+  try {
+    const { suggestions } = await mapsApi('places', { input: q, sessionToken: route.token, near: route.near || (live.lastFix ? { lat: live.lastFix.lat, lon: live.lastFix.lon } : null) });
+    if (my !== route.req || routeField(which).value.trim() !== q) return;
+    showList(suggestions, which);
+  } catch (e) { if (my === route.req) { hideList(); if (e.code === 'missing-key') toast(routeErrHe(e)); } }
+}
+['from', 'to'].forEach((which) => {
+  const inp = routeField(which);
+  inp.addEventListener('input', () => {
+    if (route[which]) { route[which] = null; inp.closest('.field').classList.remove('set'); route.result = null; renderRouteInfo(); }
+    route.active = which; clearTimeout(route.timer); route.timer = setTimeout(() => suggest(which), 320);
+  });
+  inp.addEventListener('focus', () => { route.active = which; if (inp.value.trim().length >= 2 && !route[which]) suggest(which); });
+  inp.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('rtFrom') && document.activeElement !== $('rtTo')) hideList(); }, 150));
+  inp.addEventListener('keydown', (e) => {
+    const n = route.items.length;
+    if (e.key === 'ArrowDown' && n) { e.preventDefault(); route.sel = (route.sel + 1) % n; markSel(); }
+    else if (e.key === 'ArrowUp' && n) { e.preventDefault(); route.sel = (route.sel - 1 + n) % n; markSel(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (n) pickSuggestion(which, route.items[route.sel < 0 ? 0 : route.sel]); }
+    else if (e.key === 'Escape') hideList();
+  });
+});
+function markSel() { $('rtList').querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-selected', String(i === route.sel))); }
+
+$('rtGps').addEventListener('click', async () => {
+  const btn = $('rtGps'); btn.classList.add('busy');
+  try {
+    const p = await geoOnce({ timeout: 15000 });
+    route.near = { lat: p.lat, lon: p.lon };
+    setPlace('from', { label: 'המיקום הנוכחי שלי', lat: p.lat, lon: p.lon });
+    hideList();
+    if (route.to) computeRoute(); else $('rtTo').focus();
+  } catch (e) {
+    toast(e.code === 1 ? 'אין הרשאת מיקום — אפשר לתת הרשאה בהגדרות, או להקליד מוצא' : 'לא הצלחנו לקבל מיקום — הקלד מוצא');
+  } finally { btn.classList.remove('busy'); }
+});
+$('rtSwap').addEventListener('click', () => {
+  const [f, t] = [route.from, route.to]; const [fv, tv] = [$('rtFrom').value, $('rtTo').value];
+  setPlace('from', t); setPlace('to', f);
+  if (!t) $('rtFrom').value = tv; if (!f) $('rtTo').value = fv;
+  hideList(); if (route.from && route.to) computeRoute();
+});
+$('when').addEventListener('change', () => { if (route.from && route.to) computeRoute(); });
+['km', 'minutes'].forEach(id => $(id).addEventListener('input', () => { if (route.result) renderRouteInfo(); }));
+
+async function computeRoute() {
+  if (!route.from || !route.to) return;
+  const my = ++route.req;
+  $('rtInfo').hidden = false; $('rtInfo').className = 'note route-info'; $('rtInfo').textContent = 'מחשב מסלול ב-Google Maps…';
+  try {
+    const when = $('when').value ? new Date($('when').value) : null;
+    const r = await mapsApi('route', { origin: route.from, destination: route.to, departureTime: when && !isNaN(when) ? when.toISOString() : undefined });
+    if (my !== route.req) return;
+    route.result = r;
+    $('km').value = r.km.toFixed(1); $('minutes').value = String(r.minutes);
+    recalc(); renderRouteInfo();
+  } catch (e) {
+    if (my !== route.req) return;
+    route.result = null; $('rtInfo').hidden = false; $('rtInfo').textContent = routeErrHe(e);
+  }
+}
+function renderRouteInfo() {
+  const el = $('rtInfo'); const r = route.result;
+  if (!r) { el.hidden = true; el.innerHTML = ''; return; }
+  const edited = Number($('km').value) !== Number(r.km.toFixed(1)) || Number($('minutes').value) !== r.minutes;
+  const traffic = r.staticMinutes && r.staticMinutes !== r.minutes ? ` (${r.staticMinutes} דק' ללא עומסים)` : '';
+  el.className = 'note route-info' + (edited ? ' edited' : '');
+  el.innerHTML = `לפי Google Maps: <b>${r.km.toFixed(1)} ק"מ</b> · <b>${r.minutes} דק'</b>${traffic}${r.via ? ` · דרך ${esc(r.via)}` : ''}${edited ? ' · שונה ידנית' : ''}<button type="button" class="clear" id="rtReset">${edited ? 'חזור למסלול' : 'נקה'}</button>`;
+  el.hidden = false;
+  $('rtReset').onclick = () => {
+    if (edited) { $('km').value = r.km.toFixed(1); $('minutes').value = String(r.minutes); recalc(); renderRouteInfo(); return; }
+    route.result = null; setPlace('from', null); setPlace('to', null); $('rtFrom').value = ''; $('rtTo').value = ''; renderRouteInfo();
+  };
+}
 
 
 // ============ מפה (Leaflet + OpenStreetMap) ============

@@ -38,6 +38,26 @@ main { min-height: 0; overflow: hidden; }
 .mini { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 4px 9px; font-size: 12px; min-height: 30px; }
 .badge { background: var(--accent); color: var(--accent-ink); border-radius: 7px; padding: 2px 8px; font-size: 13px; font-weight: 700; min-width: 28px; text-align: center; }
 
+/* מסלול: מוצא/יעד עם השלמה אוטומטית (Google Maps) */
+.route { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.field.place { padding-inline-end: 6px; }
+.field.place input { direction: rtl; text-align: right; font-family: "Heebo", "Segoe UI", Arial, sans-serif; font-size: 15px; font-weight: 500; }
+.field.place.set input { color: var(--accent-text); }
+.mini.icon { padding: 0; width: 34px; min-height: 34px; display: grid; place-items: center; color: var(--ink-2); flex: none; }
+.mini.icon svg { width: 18px; height: 18px; }
+.mini.icon.busy svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.suggest { position: absolute; inset-inline: 0; z-index: 60; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0,0,0,.45); max-height: 240px; overflow: auto; padding: 4px; }
+.suggest button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: right; background: transparent; border: 0; border-radius: 8px; padding: 8px 10px; }
+.suggest button:hover, .suggest button:focus-visible, .suggest button[aria-selected="true"] { background: var(--surface-2); outline: none; }
+.suggest b { font-weight: 600; font-size: 14px; }
+.suggest small { color: var(--ink-3); font-size: 12px; }
+.suggest .empty { color: var(--ink-3); font-size: 13px; padding: 8px 10px; }
+.route-info { display: block; line-height: 1.5; padding: 0 2px; min-height: 18px; }
+.route-info b { color: var(--accent-text); font-weight: 600; }
+.route-info.edited { color: var(--ink-3); }
+.route-info .clear { float: inline-end; margin-inline-start: 8px; background: transparent; border: 0; color: var(--ink-3); text-decoration: underline; font-size: 12px; padding: 0 2px; }
+
 /* אריחי תוספות */
 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 2px 5px; display: flex; flex-direction: column; align-items: center; gap: 1px; min-height: 60px; color: var(--ink-2); font-size: 11px; line-height: 1.15; text-align: center; transition: background .12s, border-color .12s; }

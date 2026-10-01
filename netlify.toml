@@ -2,6 +2,11 @@
   command = "node build.mjs"
   publish = "dist"
 
+# פונקציית שרת למסלולים (Google Maps): netlify/functions/maps.mjs — דורשת משתנה סביבה GOOGLE_MAPS_KEY ב-Netlify
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 [build.environment]
   # החבילות ב-package.json משמשות רק לבניית האפליקציות (Android/iOS); לאתר לא צריך להריץ סקריפטי התקנה
   NPM_FLAGS = "--no-audit --no-fund --ignore-scripts"
