@@ -68,7 +68,37 @@ android {
     s = s.replace(/buildTypes\s*\{\s*release\s*\{/, `buildTypes {\n        debug {\n            signingConfig signingConfigs.release\n        }\n        release {\n            signingConfig signingConfigs.release`);
     console.log('הוגדרה חתימת release');
   }
+  // R8: כיווץ והצפנת קוד (דרישת Google Play – "DEX code optimization"). גם ב-debug, כדי שה-APK לבדיקה
+  // (ובדיקת האמולטור ב-CI) ירוץ בדיוק עם אותם כללים כמו ה-AAB לחנות. ANDROID_MINIFY=false מכבה בחירום.
+  // קובץ ה-mapping נארז אוטומטית בתוך ה-AAB, ו-Google Play משתמש בו לפענוח קריסות.
+  if (process.env.ANDROID_MINIFY !== 'false') {
+    s = s.replace(/minifyEnabled\s+false/g, 'minifyEnabled true').replace(/getDefaultProguardFile\('proguard-android\.txt'\)/g, "getDefaultProguardFile('proguard-android-optimize.txt')");
+    if (!/debug\s*\{[^}]*minifyEnabled/.test(s)) s = s.replace(/buildTypes\s*\{/, `buildTypes {\n        debug {\n            minifyEnabled true\n            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'\n        }`);
+    if (!/minifyEnabled true/.test(s)) { console.error('לא הצלחתי להפעיל minifyEnabled ב-app/build.gradle'); process.exit(4); }
+    console.log('R8 (minify) הופעל');
+  }
   return s;
+});
+
+// 3b) כללי R8 שהאפליקציה צריכה מעבר לכללים שמגיעים עם Capacitor ו-Firebase
+edit('app/proguard-rules.pro', (s) => {
+  if (s.includes('# mone-rules')) return s;
+  return s + `
+# mone-rules
+# מספרי שורות בדוחות קריסה (שם הקובץ מוסתר)
+-keepattributes SourceFile,LineNumberTable,*Annotation*,Signature,InnerClasses,EnclosingMethod
+-renamesourcefileattribute SourceFile
+# גשר ה-WebView של Capacitor (JavascriptInterface) והפלאגינים
+-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }
+-keep class com.getcapacitor.** { *; }
+-keep class com.capacitorjs.** { *; }
+-keep class io.capawesome.** { *; }
+-keep class io.capacitor.** { *; }
+# Credential Manager (התחברות Google דרך @capacitor-firebase/authentication) – לפי התיעוד של Android
+-if class androidx.credentials.CredentialManager
+-keep class androidx.credentials.playservices.** { *; }
+-dontwarn com.google.errorprone.annotations.**
+`;
 });
 
 // 4) variables.gradle: Google Sign-In עבור @capacitor-firebase/authentication
