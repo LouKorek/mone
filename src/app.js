@@ -725,7 +725,7 @@ function openAbout() {
   openSheet('אודות', `<p>"מונה" מחשבת את המחיר המרבי החוקי של נסיעה במונית מיוחדת בישראל, לפי צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026 (ק"ת 12345), ולפי תקנות התעבורה.</p>
     <p class="note">החישוב הוא הערכה: המונה המכויל במונית הוא הקובע, ומדידת GPS יכולה לסטות בכמה אחוזים. התעריפים מתעדכנים כל 1 באפריל.</p>
     <p class="note">מקורות: <a href="https://www.gov.il/he/pages/taxi-rate-2026" target="_blank" rel="noopener">משרד התחבורה — תעריפי מוניות 2026</a> · <a href="https://he.wikisource.org/wiki/צו_פיקוח_על_מחירי_מצרכים_ושירותים_(מחירי_נסיעה_במוניות)" target="_blank" rel="noopener">נוסח הצו</a> · <a href="https://www.kolzchut.org.il/he/זכותון_נסיעה_במונית_מיוחדת_(ספיישל)" target="_blank" rel="noopener">כל-זכות</a></p>
-    <p class="note">גרסה 0.9 (${BUILD === '__BUILD__' ? 'dev' : BUILD}) · לו קורק · lou.korek@gmail.com · <a href="#" data-doc="terms">תנאי שימוש</a> · <a href="#" data-doc="privacy">פרטיות</a> · <a href="#" data-doc="accessibility">נגישות</a></p>
+    <p class="note">גרסה 0.9.1 (${BUILD === '__BUILD__' ? 'dev' : BUILD}) · לו קורק · lou.korek@gmail.com · <a href="#" data-doc="terms">תנאי שימוש</a> · <a href="#" data-doc="privacy">פרטיות</a> · <a href="#" data-doc="accessibility">נגישות</a></p>
     <div class="actions"><button class="btn ghost" id="chkUpd" type="button">בדוק עדכון</button></div>`, (b) => {
     b.querySelector('#chkUpd').onclick = async () => {
       const reg = await navigator.serviceWorker?.getRegistration();
