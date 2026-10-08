@@ -3,6 +3,7 @@ import { t } from '../i18n.js';
 import { tariffAt, activePeriod, getTariffs } from '../engine.js';
 import { draft, quickPlaces, lastRide, subscribe } from '../store.js';
 import { $, esc, icon, nis, hm, relDay, arrow, defineScreen, go, openSheet, tariffName, tariffShort, dayLabelT } from './dom.js';
+import { profileBtnHtml } from './account.js';
 import { routeFieldsHtml, wireRoute, onRoute, pickSaved, computeRoute } from './route.js';
 import { liveState } from './live.js';
 import { openMenu, openTariffs } from './more.js';
@@ -47,6 +48,7 @@ defineScreen('home', {
       <header class="appbar home">
         <div class="brand"><img src="icons/logo-96.png" alt="" width="36" height="36"><span class="wordmark">${t('מונה')}</span></div>
         ${nowChip()}
+        ${profileBtnHtml()}
         <button type="button" class="iconbtn" id="menuBtn" aria-label="${t('תפריט')}">${icon('menu')}</button>
       </header>
       <div class="stack">

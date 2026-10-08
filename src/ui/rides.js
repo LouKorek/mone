@@ -3,6 +3,7 @@ import { t } from '../i18n.js';
 import { loadRides, subscribe } from '../store.js';
 import { gapOf } from '../ride.js';
 import { $, esc, icon, nis, hm, relDay, arrow, defineScreen, go, back, tariffLabelT } from './dom.js';
+import { profileBtnHtml } from './account.js';
 
 function rowHtml(r) {
   const d = new Date(r.at), g = gapOf(r);
@@ -21,7 +22,7 @@ function listHtml(list) {
 defineScreen('rides', {
   render(el) {
     el.innerHTML = `
-      <header class="appbar"><button type="button" class="iconbtn" id="ridesBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1>${t('נסיעות')}</h1></header>
+      <header class="appbar"><button type="button" class="iconbtn" id="ridesBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1>${t('נסיעות')}</h1>${profileBtnHtml()}</header>
       <div class="stack" id="ridesList">${listHtml(loadRides())}</div>`;
     $('ridesBack').addEventListener('click', () => { if (!back()) go('home', {}, { root: true }); });
     $('ridesList').addEventListener('click', (e) => {

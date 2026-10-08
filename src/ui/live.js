@@ -7,6 +7,7 @@ import { geoWatch, geoClear, keepAwake } from '../native.js';
 import { draft, newSurcharges, applyDetected, saveRide, saveLive, loadLive, clearLive, emit } from '../store.js';
 import { rideFromMeter, compactTrack, estimate } from '../ride.js';
 import { $, icon, nis, fmtDuration, defineScreen, go, back, toast, tariffName, dayLabelT, autoName } from './dom.js';
+import { profileBtnHtml } from './account.js';
 import { renderTiles, activeCount } from './tiles.js';
 import { LiveMap, bearing, mapEmptyText } from './map.js';
 import { setNearFix } from './route.js';
@@ -155,7 +156,7 @@ defineScreen('live', {
   render(el, params = {}) {
     map.destroy();
     el.innerHTML = `
-      <header class="appbar dark"><button type="button" class="iconbtn" id="liveBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1>${t('מונה חי')}</h1><span class="gps" id="meterGps">${t('GPS כבוי')}</span></header>
+      <header class="appbar dark"><button type="button" class="iconbtn" id="liveBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1>${t('מונה חי')}</h1><span class="gps" id="meterGps">${t('GPS כבוי')}</span>${profileBtnHtml()}</header>
       <div class="live-wrap">
         <section class="meter-hero" id="meterHero" aria-live="off">
           <span class="amount" id="meterTotal">₪0.00</span>

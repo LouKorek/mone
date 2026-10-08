@@ -9,16 +9,16 @@ import { restoreLive, isRunning, setPendingReload } from './ui/live.js';
 import { shownRide } from './ui/summary.js';
 import './ui/rides.js';
 import { applyTheme, pwa } from './ui/more.js';
-import { startCloud, syncRides, currentUser } from './ui/account.js';
+import { startCloud, syncRides, currentUser, authHint } from './ui/account.js';
 import { t } from './i18n.js';
 
 applyTheme();
 translateStatic();
 initSheet();
 
-// מסך ראשון: נסיעה פעילה שנשמרה → מונה חי; אחרת → בית
-go('home', {}, { root: true });
-if (restoreLive()) go('live');
+// מסך ראשון: נסיעה פעילה שנשמרה → מונה חי; משתמש מחובר → בית; אחרת → מסך פתיחה (אורח או התחברות)
+if (restoreLive()) { go('home', {}, { root: true }); go('live'); }
+else go(authHint() ? 'home' : 'welcome', {}, { root: true });
 
 startCloud();
 
@@ -47,7 +47,7 @@ window.addEventListener('offline', renderOnline);
 renderOnline();
 
 // ============ אפליקציה מותקנת (Android/iOS): כפתור חזרה ============
-initNative({ onBack: () => { if (back()) return true; if (currentScreen() !== 'home') { go('home', {}, { root: true }); return true; } return false; } });
+initNative({ onBack: () => { if (back()) return true; if (!['home', 'welcome'].includes(currentScreen())) { go('home', {}, { root: true }); return true; } return false; } });
 
 // לבדיקות ולתצוגה מקדימה
 window.__mone = { go, currentScreen, currentEstimate, shownRide, homeReady, sheetOpen, closeSheet };

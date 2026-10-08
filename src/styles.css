@@ -381,3 +381,35 @@ html[lang="ar"] body, html[lang="ru"] body { font-family: "Rubik", "Segoe UI", "
 html.native .appbar { padding-top: calc(10px + env(safe-area-inset-top)); }
 @media (min-width: 560px) { .screen { padding-top: 8px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---- כפתור פרופיל ---- */
+.iconbtn.profile { width: 40px; height: 40px; border: 1px solid var(--line); background: var(--surface); overflow: hidden; padding: 0; }
+.appbar.dark .iconbtn.profile { border-color: #ffffff26; background: #ffffff10; }
+.iconbtn.profile svg { width: 22px; height: 22px; color: var(--ink-2); }
+.appbar.dark .iconbtn.profile svg { color: #e9efe9; }
+.iconbtn.profile.on { border-color: var(--taxi); border-width: 2px; }
+.iconbtn.profile .avatar { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.iconbtn.profile .initial { font-weight: 700; font-size: 17px; color: var(--ink); }
+.appbar.dark .iconbtn.profile .initial { color: #e9efe9; }
+.appbar.home .now-chip span { max-width: 34vw; }
+
+/* ---- מסך פתיחה ---- */
+html[data-screen="welcome"] body { background: var(--bg); }
+.welcome { min-height: 100dvh; display: flex; flex-direction: column; gap: 16px; justify-content: center; padding: 28px 20px; padding-top: calc(28px + env(safe-area-inset-top)); padding-bottom: calc(24px + env(safe-area-inset-bottom)); max-width: 480px; margin: 0 auto; box-sizing: border-box; }
+.welcome-brand { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; margin-bottom: 6px; }
+.welcome-brand img { width: 88px; height: 88px; border-radius: 22px; box-shadow: 0 10px 30px #0003; }
+.welcome-brand .wordmark { font-size: 44px; margin: 6px 0 0; }
+.welcome-brand p { margin: 0; color: var(--ink-2); font-size: 16px; }
+.welcome-card { display: flex; flex-direction: column; gap: 12px; }
+.welcome-card .lead { margin: 0; font-size: 15px; color: var(--ink-2); text-align: center; }
+.welcome-card .note { margin: 0; font-size: 12px; text-align: center; }
+.btn.google { background: var(--surface); color: var(--ink); border: 1px solid var(--line); gap: 10px; }
+.btn.guest { width: 100%; }
+.note.center { text-align: center; margin: 0; }
+.email-login > summary { list-style: none; cursor: pointer; padding: 4px 0; }
+.email-login > summary::-webkit-details-marker { display: none; }
+.email-login .email-fields { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.email-login > summary.btn { min-height: 52px; }
+.email-login[open] > summary.btn { display: none; }
+.email-login[open] .email-fields { margin-top: 0; }
+html[dir="rtl"] input[dir="ltr"][type="password"]:placeholder-shown { direction: rtl; }

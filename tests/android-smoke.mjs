@@ -50,10 +50,10 @@ const evaluate = (expression) => new Promise((res) => {
 });
 
 // מחכים לסיום הטעינה
-const waitLoad = async () => { for (let i = 0; i < 20; i++) { if (await evaluate(`document.readyState === 'complete' && !!document.querySelector('#startMeter')`) === true) break; await sleep(1000); } await sleep(3000); };
+const waitLoad = async () => { for (let i = 0; i < 20; i++) { if (await evaluate(`document.readyState === 'complete' && !!document.querySelector('#startMeter, #guestBtn')`) === true) break; await sleep(1000); } await sleep(3000); };
 await waitLoad();
 // השפה נבחרת לפי שפת המכשיר (באמולטור: אנגלית). בודקים שהתרגום עובד, ואז עוברים לעברית לשאר הבדיקות.
-const first = await evaluate(`({ lang: document.documentElement.lang, dir: document.documentElement.dir, cta: document.querySelector('#estimateBtn')?.textContent.trim() })`);
+const first = await evaluate(`({ lang: document.documentElement.lang, dir: document.documentElement.dir, guest: document.querySelector('#guestBtn')?.textContent.trim() })`);
 console.log('שפה בהפעלה ראשונה:', JSON.stringify(first));
 check('שפת הממשק נקבעה (he/en/ru/ar) והכיוון תואם', ['he', 'en', 'ru', 'ar'].includes(first.lang) && first.dir === (['he', 'ar'].includes(first.lang) ? 'rtl' : 'ltr'), JSON.stringify(first));
 if (first.lang !== 'he') { await evaluate(`localStorage.setItem('mone.lang', 'he'); setTimeout(() => location.reload(), 50); true`); await sleep(1500); await waitLoad(); }
@@ -71,6 +71,9 @@ const r = await evaluate(`(async () => {
   await t('StatusBar.getInfo', async () => (await P.StatusBar.getInfo()).visible);
   await t('KeepAwake.isSupported', async () => (await P.KeepAwake.isSupported()).isSupported);
   await t('FirebaseAuthentication.getCurrentUser', async () => JSON.stringify((await P.FirebaseAuthentication.getCurrentUser()).user));
+  out.welcome = window.__mone.currentScreen();
+  document.getElementById('guestBtn').click();
+  out.profileBtn = !!document.querySelector('.appbar [data-profile]');
   document.getElementById('estimateBtn').click();
   out.screen = window.__mone.currentScreen();
   document.getElementById('when').value = '2026-09-06T10:00';
@@ -100,6 +103,8 @@ check('Filesystem', r['Filesystem.write+read'] === 'bW9uZQ==' || r['Filesystem.w
 check('StatusBar', !/^ERROR/.test(String(r['StatusBar.getInfo'])), String(r['StatusBar.getInfo']));
 check('KeepAwake', !/^ERROR/.test(String(r['KeepAwake.isSupported'])), String(r['KeepAwake.isSupported']));
 check('FirebaseAuthentication (Firebase native אחרי R8)', !/^ERROR/.test(String(r['FirebaseAuthentication.getCurrentUser'])), String(r['FirebaseAuthentication.getCurrentUser']));
+check('בלי משתמש נפתח מסך הפתיחה', r.welcome === 'welcome', String(r.welcome));
+check('כפתור פרופיל בשורה העליונה', r.profileBtn === true);
 check('מסך ההערכה נפתח מהבית', r.screen === 'estimate', String(r.screen));
 check('ההערכה מחשבת (5 ק"מ, 15 דק\', ראשון 10:00 = ₪51.40)', r.calcTotal === '₪51.40', r.calcTotal);
 check('"התעריפים הנוכחיים" נפתח', r.tariffsSheet === 'התעריפים הנוכחיים', String(r.tariffsSheet));

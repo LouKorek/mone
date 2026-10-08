@@ -4,6 +4,7 @@ import { activePeriod } from '../engine.js';
 import { draft } from '../store.js';
 import { estimate, priceRange, departureTip, routeEdited, rideFromEstimate } from '../ride.js';
 import { $, esc, icon, nis, nis0, hm, arrow, toLocalInputValue, defineScreen, go, back, tariffShort, tariffName, dayLabelT, tariffLabelT } from './dom.js';
+import { profileBtnHtml } from './account.js';
 import { renderTiles } from './tiles.js';
 import { breakdownHtml, diffHtml, splitHtml, wireSplit } from './price.js';
 import { computeRoute, clearPlaces, onRoute } from './route.js';
@@ -58,7 +59,7 @@ defineScreen('estimate', {
   render(el, params = {}) {
     const period = activePeriod(draft.when || new Date());
     el.innerHTML = `
-      <header class="appbar"><button type="button" class="iconbtn" id="estBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1>${t('כמה זה יעלה?')}</h1></header>
+      <header class="appbar"><button type="button" class="iconbtn" id="estBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1>${t('כמה זה יעלה?')}</h1>${profileBtnHtml()}</header>
       <div class="stack">
         <div id="routeCard">${routeCard()}</div>
         <div class="row2">

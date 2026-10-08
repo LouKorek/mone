@@ -4,6 +4,7 @@ import { t } from '../i18n.js';
 import { updateRide, deleteRide } from '../store.js';
 import { fareOf, gapOf } from '../ride.js';
 import { $, esc, icon, nis, hm, relDay, arrow, defineScreen, go, back, sheetContext, tariffLabelT, dayLabelT } from './dom.js';
+import { profileBtnHtml } from './account.js';
 import { breakdownHtml, diffHtml, splitHtml, wireSplit } from './price.js';
 import { miniMap } from './map.js';
 import { openReceipt } from './receipt.js';
@@ -21,7 +22,7 @@ defineScreen('summary', {
     const where = ride.from && ride.to ? `<div class="places"><span class="dot from"></span><span class="p">${esc(ride.from)}</span><span class="arr">${arrow()}</span><span class="dot to"></span><span class="p">${esc(ride.to)}</span></div>` : '';
     const estLine = ride.estimated ? `<span class="range">${t('הערכה לפני הנסיעה: {amount}', { amount: nis(ride.estimated) })}</span>` : '';
     el.innerHTML = `
-      <header class="appbar"><button type="button" class="iconbtn" id="sumBack" aria-label="${t('חזרה')}">${icon(justEnded ? 'close' : 'back')}</button><h1>${justEnded ? t('סיכום הנסיעה') : t('פרטי הנסיעה')}</h1></header>
+      <header class="appbar"><button type="button" class="iconbtn" id="sumBack" aria-label="${t('חזרה')}">${icon(justEnded ? 'close' : 'back')}</button><h1>${justEnded ? t('סיכום הנסיעה') : t('פרטי הנסיעה')}</h1>${profileBtnHtml()}</header>
       <div class="stack">
         <section class="hero">
           <span class="eyebrow">${ride.source === 'calc' ? t('המחיר המרבי לפי הצו') : t('מה המונה היה צריך להראות')}</span>
