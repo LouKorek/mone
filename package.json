@@ -1,6 +1,6 @@
 {
   "name": "mone",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "type": "module",
   "private": true,
   "description": "מונה — המחיר החוקי של נסיעה במונית בישראל",

@@ -98,5 +98,45 @@ for (const lang of ['en', 'ru', 'ar']) {
   ok(`תרגום ${lang} – משתנים`, bad.join(' | '), '');
 }
 
+// ---- שכבת הנסיעה (ride.js) ומצב האפליקציה (store.js) ----
+{
+  const mem = new Map();
+  globalThis.localStorage = { getItem: (k) => mem.has(k) ? mem.get(k) : null, setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
+  const R = await import('../src/ride.js');
+  const S = await import('../src/store.js');
+  // הערכה: 12 ק"מ, 25 דק', יום חול בצהריים, תעריף א' של הוראת השעה
+  const dr = { when: d('2026-10-07T12:00'), km: 12, minutes: 25, opts: S.newSurcharges(), route: null };
+  const est = R.estimate(dr);
+  ok('הערכה: 12 ק"מ 25 דק\' תעריף א\'', est.fare.total, 88.18);
+  ok('הערכה: יש קלט', est.hasInput, true);
+  ok('הערכה ריקה: אין קלט', R.estimate({ ...dr, km: 0, minutes: 0 }).hasInput, false);
+  const rg = R.priceRange(dr, est);
+  ok('טווח: הגבול התחתון לא מעל המחיר', rg[0] <= est.fare.total, true);
+  ok('טווח: הגבול העליון לא מתחת למחיר', rg[1] >= est.fare.total, true);
+  // טיפ: 20:30 ביום חול – בעוד חצי שעה תעריף ב' (יקר יותר) → למהר
+  const late = { ...dr, when: d('2026-10-07T20:30') };
+  ok('טיפ: למהר לפני מעבר לתעריף ב\'', R.departureTip(late, R.estimate(late))?.kind, 'hurry');
+  // זיהוי תוספות: לא דורס בחירה ידנית, ומתקדם רק כלפי מעלה בכרמל
+  const tg = { opts: S.newSurcharges(), auto: {} };
+  const added = S.applyDetected(tg, { airport: 'ben-gurion', road6: true, segment18: false, carmel: 1 }, new Set(['road6']));
+  ok('זיהוי: נוספו שדה תעופה וכרמל', added.map(([k]) => k).join(','), 'airport,carmel');
+  ok('זיהוי: כביש 6 ידני לא נדרס', tg.opts.road6, false);
+  S.applyDetected(tg, { carmel: 2 });
+  ok('זיהוי: כרמל עולה לשני קטעים', tg.opts.carmel, 2);
+  S.resetAuto(tg);
+  ok('איפוס זיהוי: מחזיר לברירת המחדל', tg.opts.carmel + '|' + tg.opts.airport, '0|null');
+  // ספרייה: שמירה, עדכון, מחיקה; הערכה לא נשמרת בעדכון
+  const ride = R.rideFromEstimate(dr, est);
+  ok('נסיעה מהערכה: מקור calc', ride.source, 'calc');
+  const m = { ...ride, id: 1, source: 'meter' };
+  S.saveRide(m); ok('ספרייה: נשמרה', S.loadRides().length, 1);
+  S.updateRide({ ...m, asked: 120 }); ok('ספרייה: עודכן הסכום שהנהג ביקש', S.lastRide().asked, 120);
+  S.updateRide({ ...ride, id: 2 }); ok('ספרייה: הערכה לא נשמרת', S.loadRides().length, 1);
+  ok('פער: ביקש יותר', R.gapOf(S.lastRide()).kind, 'over');
+  S.deleteRide(1); ok('ספרייה: נמחקה', S.loadRides().length, 0);
+  ok('חלוקה בין 3: מעגל כלפי מעלה', R.perPassenger(100, 3), 33.34);
+  ok('דחיסת מסלול: נקודות קרובות מתאחדות', R.compactTrack([[32, 34.8], [32.00001, 34.8], [32.001, 34.8]]).length, 2);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
