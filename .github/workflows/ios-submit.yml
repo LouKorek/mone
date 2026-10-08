@@ -1,0 +1,28 @@
+# מגיש את גרסת iOS לבדיקה ב-App Store דרך ה-API, אחרי ש-ios.yml העלה את ה-build. הפעלה ידנית בלבד.
+name: iOS submit for review
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode: { description: 'status (רק דיווח) או submit', default: 'status' }
+      version: { description: 'מספר גרסה, למשל 0.11.0', required: true }
+      build: { description: 'מספר build (מספר ה-run של ios.yml)', required: true }
+      notes: { description: 'מה חדש', required: true }
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyjwt cryptography
+      - name: App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          MODE: ${{ inputs.mode }}
+          VERSION: ${{ inputs.version }}
+          BUILD: ${{ inputs.build }}
+          NOTES: ${{ inputs.notes }}
+        run: python tools/asc-submit.py "$MODE" "$VERSION" "$BUILD" "$NOTES"
