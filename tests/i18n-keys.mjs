@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const keys = new Set();
 const HEB = /[\u0590-\u05FF]/;
-const app = read('src/app.js');
+import { readdirSync } from 'node:fs';
+const uiFiles = readdirSync(new URL('../src/ui/', import.meta.url)).filter((f) => f.endsWith('.js')).map((f) => 'src/ui/' + f);
+const app = ['src/app.js', 'src/store.js', 'src/ride.js', ...uiFiles].map(read).join('\n');
 for (const m of app.matchAll(/\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g)) keys.add(m[2].replace(/\\(['"\\])/g, '$1'));
 // מערך FACTS (מתורגם דרך t(a), t(d), t(s))
 const facts = app.slice(app.indexOf('const FACTS = ['), app.indexOf('];', app.indexOf('const FACTS = [')));
@@ -19,6 +21,8 @@ const title = html.match(/<title>([^<]+)<\/title>/); if (title) keys.add(title[1
 const cloud = read('src/cloud.js');
 for (const m of cloud.slice(cloud.indexOf('export const errorHe')).matchAll(/:\s*'([^']+)'/g)) if (HEB.test(m[1])) keys.add(m[1]);
 keys.add('משהו השתבש, נסה שוב');
+// ערכת נושא (מתורגמת דרך t(l))
+['אוטומטי', 'בהיר', 'כהה'].forEach(k => keys.add(k));
 // מסמכים משפטיים – כותרות
 ['תנאי שימוש', 'מדיניות פרטיות', 'הצהרת נגישות', 'מחיקת חשבון ומידע'].forEach(k => keys.add(k));
 export const KEYS = [...keys].filter(k => HEB.test(k));
