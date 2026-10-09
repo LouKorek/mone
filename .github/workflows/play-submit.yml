@@ -1,0 +1,30 @@
+# מעלה ל-Google Play (Production) את ה-AAB שנבנה ב-run של android.yml, ושולח לבדיקה. הפעלה ידנית בלבד.
+name: Play submit
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: { description: 'מזהה ה-run של android.yml שממנו לקחת את ה-AAB', required: true }
+      notes: { description: 'מה חדש (עברית)', required: true }
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: art
+      - run: pip install google-api-python-client google-auth
+      - name: Google Play
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          NOTES: ${{ inputs.notes }}
+        run: python tools/play-submit.py "$(find art -name '*.aab' | head -1)" "$NOTES"
