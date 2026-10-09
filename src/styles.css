@@ -154,6 +154,19 @@ html.ltr .iconbtn svg use[href="#i-back"], html.ltr svg.chev { transform: scaleX
 .rates-row b { font-size: 19px; font-weight: 600; color: var(--ink); align-self: flex-start; }
 .rates-row b::before { content: "₪"; font-size: .75em; margin-inline-end: 1px; color: var(--ink-3); }
 .quick-links { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+/* במסך הבית: סרגל תחתון קבוע, כמו באפליקציה */
+.screen[data-screen="home"] { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+.screen[data-screen="home"] .stack { flex: 1; }
+/* שני הכפתורים הראשיים כאריחים גדולים זה לצד זה, שממלאים את הגובה הפנוי */
+.screen[data-screen="home"] .cta { flex: 1 1 auto; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 12px; min-height: 168px; }
+.screen[data-screen="home"] .cta .btn { flex-direction: column; justify-content: center; gap: 14px; min-height: 0; padding: 16px 12px; font-size: 19px; }
+.screen[data-screen="home"] .cta .btn svg { width: 40px; height: 40px; }
+.screen[data-screen="home"] .cta .btn > span { align-items: center; text-align: center; gap: 4px; }
+.screen[data-screen="home"] .cta .btn[hidden] { display: none; }
+.screen[data-screen="home"] .cta .btn[hidden] + .btn, .screen[data-screen="home"] .cta .btn:only-child { grid-column: 1 / -1; }
+.screen[data-screen="home"] .quick-links { position: fixed; bottom: 0; inset-inline: 0; z-index: 50; max-width: 520px; margin: 0 auto; gap: 0; padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
+.screen[data-screen="home"] .quick-links button { min-height: 56px; font-size: 11.5px; }
+.screen[data-screen="home"] .quick-links button:active { background: var(--surface-2); }
 .quick-links button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border: 0; background: transparent; color: var(--ink-2); font-size: 12.5px; border-radius: var(--r-sm); min-height: 64px; }
 .quick-links button svg { width: 22px; height: 22px; color: var(--ink); }
 .quick-links button:hover { background: var(--surface); }
@@ -287,11 +300,17 @@ details .split { border: 0; padding: 10px 0 0; background: transparent; border-t
 .empty-state p { margin: 0; max-width: 32ch; }
 
 /* ---------- גיליון תחתון ---------- */
-.sheet-backdrop { position: fixed; inset: 0; background: rgba(8,10,14,.5); z-index: 900; animation: fade .18s ease-out; }
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(8,10,14,.5); z-index: 900; animation: fade .2s ease-out; transition: opacity .22s ease; touch-action: none; }
+.sheet-backdrop.closing { opacity: 0; }
+html.sheet-open, html.sheet-open body { overflow: hidden; }
 @keyframes fade { from { opacity: 0; } }
-.sheet { position: fixed; inset-inline: 0; bottom: 0; max-width: 520px; margin: 0 auto; max-height: 92dvh; background: var(--bg); border-radius: 20px 20px 0 0; z-index: 1000; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -10px 40px rgba(0,0,0,.3); animation: up .22s cubic-bezier(.2,.8,.2,1); }
+.sheet { position: fixed; inset-inline: 0; bottom: 0; max-width: 520px; margin: 0 auto; max-height: calc(100dvh - env(safe-area-inset-top) - 10px); background: var(--bg); border-radius: 20px 20px 0 0; z-index: 1000; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -10px 40px rgba(0,0,0,.3); transition: transform .24s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+.sheet.opening { animation: sheetIn .3s cubic-bezier(.2,.8,.2,1); }
+.sheet.closing { transform: translateY(100%) !important; transition: transform .22s cubic-bezier(.4,0,1,1); }
+@keyframes sheetIn { from { transform: translateY(100%); } }
 @keyframes up { from { transform: translateY(40px); opacity: .5; } }
-.grip { width: 40px; height: 4px; border-radius: 2px; background: var(--line-2); margin: 8px auto 0; }
+.grip { width: 40px; height: 5px; border-radius: 3px; background: var(--line-2); margin: 8px auto 2px; flex: none; }
+.grip, .sheet-head { touch-action: none; cursor: grab; }
 .sheet-head { display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 16px; }
 .sheet-head h2 { margin: 0; flex: 1; font-size: 19px; font-weight: 600; }
 .sheet-head .close { background: var(--surface-2); }

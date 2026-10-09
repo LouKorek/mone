@@ -81,10 +81,16 @@ export async function nativeAppleCredential() {
 export async function nativeSignOut() { try { await P('FirebaseAuthentication')?.signOut(); } catch (e) { /* */ } }
 export const hasNativeApple = () => isNative() && platform() === 'ios';
 
+// סרגל המצב בצבע של ערכת הצבעים: טקסט בהיר על רקע כהה, טקסט כהה על רקע בהיר
+export async function setStatusBar(dark) {
+  if (!isNative()) return;
+  try { await P('StatusBar')?.setStyle({ style: dark ? 'DARK' : 'LIGHT' }); } catch (e) { /* */ }
+  if (platform() === 'android') { try { await P('StatusBar')?.setBackgroundColor({ color: dark ? '#0e1118' : '#eef0f2' }); } catch (e) { /* */ } }
+}
+
 // ---- מערכת: סרגל מצב, כפתור חזרה באנדרואיד ----
 export async function initNative({ onBack }) {
   if (!isNative()) return;
   document.documentElement.classList.add('native', platform());
-  try { await P('StatusBar')?.setStyle({ style: 'DARK' }); await P('StatusBar')?.setBackgroundColor({ color: '#0f141d' }); } catch (e) { /* */ }
   try { await P('App')?.addListener('backButton', ({ canGoBack }) => { if (!onBack()) P('App').minimizeApp(); }); } catch (e) { /* */ }
 }

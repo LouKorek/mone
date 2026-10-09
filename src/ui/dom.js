@@ -71,7 +71,12 @@ function paint(entry) {
   const sheet = $('sheet'); sheetCtx = null;
   $('sheetTitle').textContent = entry.title; $('sheetBody').innerHTML = entry.html;
   $('sheetBack').hidden = stack.length < 2;
+  const wasOpen = !sheet.hidden;
+  clearTimeout(hideTimer); sheet.classList.remove('closing'); $('sheetBackdrop').classList.remove('closing');
+  sheet.style.transform = ''; $('sheetBackdrop').style.opacity = '';
   sheet.hidden = false; $('sheetBackdrop').hidden = false;
+  if (!wasOpen) { sheet.classList.remove('opening'); void sheet.offsetWidth; sheet.classList.add('opening'); }
+  document.documentElement.classList.add('sheet-open');
   $('sheetBody').scrollTop = 0;
   if (entry.after) entry.after($('sheetBody'));
   $('sheetClose').focus({ preventScroll: true });
@@ -86,10 +91,55 @@ export function closeSheet(all = false) {
   if (!stack.length) return;
   const closed = all ? stack.splice(0) : [stack.pop()];
   if (stack.length) { paint(stack[stack.length - 1]); }
-  else { $('sheet').hidden = true; $('sheetBackdrop').hidden = true; sheetCtx = null; }
+  else { hideSheet(); sheetCtx = null; }
   closed.forEach((e) => { if (e.onClose) e.onClose(); });
 }
+// יציאה עם החלקה למטה, כמו גיליון אמיתי
+let hideTimer = 0;
+function hideSheet() {
+  const sheet = $('sheet'), bd = $('sheetBackdrop');
+  document.documentElement.classList.remove('sheet-open');
+  sheet.classList.remove('opening'); sheet.classList.add('closing'); bd.classList.add('closing');
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => { sheet.hidden = true; bd.hidden = true; sheet.classList.remove('closing'); bd.classList.remove('closing'); sheet.style.transform = ''; bd.style.opacity = ''; }, 220);
+}
+// גרירה למטה סוגרת: מהידית ומהכותרת תמיד, ומתוך התוכן כשהוא גלול לראש
+function initSheetDrag() {
+  const sheet = $('sheet'), body = $('sheetBody'), bd = $('sheetBackdrop');
+  let y0 = 0, t0 = 0, dy = 0, mode = null; // null | 'maybe' | 'drag' | 'scroll'
+  sheet.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { mode = null; return; }
+    y0 = e.touches[0].clientY; t0 = Date.now(); dy = 0;
+    const inBody = body.contains(e.target);
+    mode = !inBody ? 'drag' : body.scrollTop <= 0 ? 'maybe' : 'scroll';
+    if (mode === 'drag' && e.target.closest('button, input, select, textarea, a')) mode = 'maybe';
+  }, { passive: true });
+  sheet.addEventListener('touchmove', (e) => {
+    if (!mode || mode === 'scroll') return;
+    const d = e.touches[0].clientY - y0;
+    if (mode === 'maybe') {
+      if (Math.abs(d) < 6) return;
+      if (d < 0 || body.scrollTop > 0) { mode = 'scroll'; return; }
+      mode = 'drag';
+    }
+    dy = Math.max(0, d);
+    if (e.cancelable) e.preventDefault();
+    sheet.style.transition = 'none'; bd.style.transition = 'none';
+    sheet.style.transform = `translateY(${dy}px)`;
+    bd.style.opacity = String(Math.max(0, 1 - dy / Math.max(1, sheet.offsetHeight)));
+  }, { passive: false });
+  const end = () => {
+    if (mode !== 'drag') { mode = null; return; }
+    mode = null;
+    sheet.style.transition = ''; bd.style.transition = '';
+    const fast = dy > 40 && dy / Math.max(1, Date.now() - t0) > 0.5;
+    if (dy > sheet.offsetHeight * 0.3 || fast) closeSheet(true);
+    else { sheet.style.transform = ''; bd.style.opacity = ''; }
+  };
+  sheet.addEventListener('touchend', end); sheet.addEventListener('touchcancel', end);
+}
 export function initSheet() {
+  initSheetDrag();
   $('sheetClose').addEventListener('click', () => closeSheet(true));
   $('sheetBack').addEventListener('click', () => closeSheet(false));
   $('sheetBackdrop').addEventListener('click', () => closeSheet(true));
