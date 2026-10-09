@@ -12,7 +12,7 @@ on:
 jobs:
   submit:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - run: pip install pyjwt cryptography

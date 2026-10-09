@@ -48,7 +48,12 @@ for v in versions:
     note(f"version {v['attributes']['versionString']}: {v['attributes']['appStoreState']}")
 for s in subs:
     note(f"review submission {s['id']}: {s['attributes']['state']}")
-builds = api('GET', f'/v1/builds?filter[app]={APP_ID}&filter[version]={build_no}&limit=1')['data']
+# build שהועלה עכשיו מופיע ב-API רק אחרי כמה דקות של עיבוד אצל Apple
+for _ in range(45 if mode == 'submit' else 1):
+    builds = api('GET', f'/v1/builds?filter[app]={APP_ID}&filter[version]={build_no}&limit=1')['data']
+    if builds:
+        break
+    time.sleep(20)
 if not builds:
     note(f'build {build_no} not found', 'error')
     raise SystemExit(1)
