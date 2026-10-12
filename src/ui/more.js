@@ -76,6 +76,22 @@ document.addEventListener('click', (e) => { const a = e.target.closest('a[data-d
 export const rideSource = { current: null };
 document.addEventListener('click', (e) => { const b = e.target.closest('[data-open="complaint"]'); if (b) openComplaint(sheetContext() || rideSource.current?.() || null); });
 
+// הבהרה ומקורות רשמיים: בכל מקום שמוצג מידע ממשלתי (מדיניות Google Play על טענות מטעות)
+export const GOV_SOURCES = [
+  ['צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018', 'https://www.gov.il/BlobFolder/dynamiccollectorresultitem/supervisionorder_05072018/he/decision_and_directives_SupervisionOrder_05072018.pdf'],
+  ['הצו (תיקון), התשפ"ו–2026: התעריפים בתוקף מ-1.4.2026', 'https://www.gov.il/BlobFolder/policy/taxi-rate-2026/he/taxi-rate-26.pdf'],
+  ['משרד התחבורה: תעריפי מוניות 2026', 'https://www.gov.il/he/pages/taxi-rate-2026'],
+  ['פקודת התעבורה ותקנות התעבורה, התשכ"א–1961 (תקנות 501–512)', 'https://main.knesset.gov.il/apps/legislation/main/laws/2000933'],
+  ['משרד התחבורה: מידע לנהג ולנוסע במונית', 'https://www.gov.il/he/pages/taxi_driver_and_passenger_information'],
+  ['חוק שוויון זכויות לאנשים עם מוגבלות, התשנ"ח–1998', 'https://main.knesset.gov.il/apps/legislation/main/laws/2001218'],
+  ['משרד התחבורה: טופס פנייה בנושא תחבורה ציבורית', COMPLAINT_FORM],
+];
+export function govNote() {
+  return `<div class="gov-note"><b>${t('"מונה" אינה אפליקציה ממשלתית ואינה קשורה למשרד התחבורה או לכל גוף ממשלתי.')}</b>
+    <span>${t('המידע כאן מבוסס על המקורות הרשמיים הבאים:')}</span>
+    <ul>${GOV_SOURCES.map(([n, u]) => `<li><a href="${u}" target="_blank" rel="noopener">${t(n)}</a></li>`).join('')}</ul></div>`;
+}
+
 export function openTariffs() {
   const p = activePeriod(new Date());
   const row = (label, a, b, c) => `<tr><td>${label}</td><td class="n">${a}</td><td class="n">${b}</td><td class="n">${c}</td></tr>`;
@@ -103,7 +119,8 @@ export function openTariffs() {
       ${row(t('שבת וחג'), '—', '06:00–19:00', '19:01–05:59')}
     </table>
     <p class="note">${t('המונה מחייב לפי זמן ולפי מרחק לאורך כל הנסיעה. מעל 10 ק"מ רק תעריף הק"מ עולה; החיוב לדקה נמשך כרגיל.')}</p>
-    <p class="note">${t('מקור: צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026.')}</p>`);
+    <p class="note">${t('מקור: צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026.')}</p>
+    ${govNote()}`);
 }
 
 
@@ -120,7 +137,7 @@ const FACTS = [
   ['עישון ורדיו', 'אסור לנהג לעשן כשיש נוסעים; חייב להנמיך רדיו לפי בקשה.', 'משרד התחבורה — חובות הנהג'],
 ];
 export function openRights() {
-  openSheet(t('ידעת? זכויות הנוסע'), `<div class="facts">${FACTS.map(([a, d, s]) => `<div class="fact"><b>${t(a)}</b>${t(d)}${s ? `<small>${t(s)}</small>` : ''}</div>`).join('')}</div>`);
+  openSheet(t('ידעת? זכויות הנוסע'), `<div class="facts">${FACTS.map(([a, d, s]) => `<div class="fact"><b>${t(a)}</b>${t(d)}${s ? `<small>${t(s)}</small>` : ''}</div>`).join('')}</div>${govNote()}`);
 }
 
 // ============ תלונה ============
@@ -149,7 +166,8 @@ export function openComplaint(ride) {
       <li>${t('בטופס: בחר "פנייה חדשה", הדבק את הטקסט וצרף את הקבלה. תתבקש גם למלא תעודת זהות, כתובת וטלפון.')}</li>
     </ol>
     <div class="actions"><a class="btn primary" id="cSubmit" href="${COMPLAINT_FORM}" target="_blank" rel="noopener">${t('פתח טופס תלונה')} ↗</a></div>
-    <div class="actions"><button class="btn ghost" id="cCopy" type="button">${t('העתק את הטקסט')}</button><a class="btn ghost" href="tel:*8787">${t('חייג *8787')}</a></div>`, (b) => {
+    <div class="actions"><button class="btn ghost" id="cCopy" type="button">${t('העתק את הטקסט')}</button><a class="btn ghost" href="tel:*8787">${t('חייג *8787')}</a></div>
+    ${govNote()}`, (b) => {
     const g = (id) => b.querySelector(id).value.trim();
     const fullText = () => `${t('תלונה על נהג מונית')}\n${t("מס' רישיון המונית")}: ${g('#cTaxi')}\n${t('בעל המונית/הנהג')}: ${g('#cDriver')}\n${t('תאריך ושעה')}: ${g('#cWhen')}\n${t('מקום')}: ${g('#cWhere')}\n\n${g('#cText')}\n\n${t('(חושב באמצעות אפליקציית "מונה" לפי צו פיקוח על מחירי נסיעה במוניות)')}`;
     const copy = async () => { try { await navigator.clipboard.writeText(fullText()); return true; } catch (e) { return false; } };
@@ -165,9 +183,9 @@ export function openComplaint(ride) {
 export function openDoc(key) { openSheet(t(DOCS[key].title), `<div class="legal">${docHtml(key, { lang: lang() })}</div>`); }
 
 export function openAbout() {
-  openSheet(t('אודות'), `<p>${t('"מונה" מחשבת את המחיר המרבי החוקי של נסיעה במונית מיוחדת בישראל, לפי צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026 (ק"ת 12345), ולפי תקנות התעבורה.')}</p>
+  openSheet(t('אודות'), `<p>${t('"מונה" מחשבת את המחיר המרבי החוקי של נסיעה במונית מיוחדת בישראל, לפי צו פיקוח על מחירי מצרכים ושירותים (מחירי נסיעה במוניות), התשע"ח–2018, כפי שתוקן ב-30.3.2026, ולפי תקנות התעבורה.')}</p>
     <p class="note">${t('החישוב הוא הערכה: המונה המכויל במונית הוא הקובע, ומדידת GPS יכולה לסטות בכמה אחוזים. התעריפים מתעדכנים כל 1 באפריל.')}</p>
-    <p class="note">${t('"מונה" אינה אפליקציה ממשלתית ואינה קשורה למשרד התחבורה או לכל גוף ממשלתי.')} ${t('מקורות רשמיים:')} <a href="https://www.gov.il/he/pages/taxi-rate-2026" target="_blank" rel="noopener">${t('משרד התחבורה — תעריפי מוניות 2026')}</a> · <a href="https://www.gov.il/he/pages/taxi_driver_and_passenger_information" target="_blank" rel="noopener">${t('משרד התחבורה — מידע לנהג ולנוסע במונית')}</a></p>
+    ${govNote()}
     <p class="note">${t('גרסה')} ${VERSION === '__VERSION__' ? 'dev' : VERSION} (${BUILD === '__BUILD__' ? 'dev' : BUILD}) · ${t('לו קורק')} · lou.korek@gmail.com · <a href="#" data-doc="terms">${t('תנאי שימוש')}</a> · <a href="#" data-doc="privacy">${t('פרטיות')}</a> · <a href="#" data-doc="accessibility">${t('נגישות')}</a></p>
     <div class="actions"><button class="btn ghost" id="chkUpd" type="button">${t('בדוק עדכון')}</button></div>`, (b) => {
     b.querySelector('#chkUpd').onclick = async () => {

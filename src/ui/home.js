@@ -64,6 +64,7 @@ defineScreen('home', {
         </div>
         ${recentHtml()}
         ${ratesHtml()}
+        <p class="gov-line">${t('"מונה" אינה אפליקציה ממשלתית')} · <button type="button" class="linkbtn inline" id="govSrc">${t('מקורות רשמיים')}</button></p>
         <nav class="quick-links" aria-label="${t('עוד')}">
           <button type="button" data-sheet="tariffs">${icon('list')}${t('תעריפים')}</button>
           <button type="button" data-sheet="rights">${icon('info')}${t('זכויות')}</button>
@@ -87,6 +88,7 @@ defineScreen('home', {
     $('menuBtn').addEventListener('click', openMenu);
     $('nowChip').addEventListener('click', openTariffs);
     $('ratesCard').addEventListener('click', openTariffs);
+    $('govSrc').addEventListener('click', () => openMenu('about'));
     $('recentRide')?.addEventListener('click', () => { const r = lastRide(); if (r) go('summary', { ride: r }); });
     $('liveBanner')?.addEventListener('click', () => go('live'));
     el.querySelector('.quick-links').addEventListener('click', (e) => {

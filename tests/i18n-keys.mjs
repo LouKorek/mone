@@ -10,6 +10,9 @@ for (const m of app.matchAll(/\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g)) keys.add(m[
 // מערך FACTS (מתורגם דרך t(a), t(d), t(s))
 const facts = app.slice(app.indexOf('const FACTS = ['), app.indexOf('];', app.indexOf('const FACTS = [')));
 for (const m of facts.matchAll(/(['"])((?:\\.|(?!\1).)*)\1/g)) { const v = m[2].replace(/\\(['"\\])/g, '$1'); if (HEB.test(v)) keys.add(v); }
+// מערך GOV_SOURCES (שמות המקורות מתורגמים דרך t(n); הכתובות לא)
+const gov = app.slice(app.indexOf('export const GOV_SOURCES = ['), app.indexOf('];', app.indexOf('export const GOV_SOURCES = [')));
+for (const m of gov.matchAll(/(['"])((?:\\.|(?!\1).)*)\1/g)) { const v = m[2].replace(/\\(['"\\])/g, '$1'); if (HEB.test(v)) keys.add(v); }
 // index.html: טקסטים ותכונות
 const html = read('index.html').replace(/<svg[\s\S]*?<\/svg>/g, '');
 for (const m of html.matchAll(/>([^<>]+)</g)) { const v = m[1].trim(); if (HEB.test(v)) keys.add(v); }
