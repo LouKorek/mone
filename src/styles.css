@@ -388,6 +388,8 @@ body.offline .appbar::after { content: ""; position: absolute; inset-inline: 0; 
 .leaflet-control-attribution a { color: #c9d2cb !important; }
 .taxi-marker { width: 34px; height: 34px; display: grid; place-items: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
 .taxi-marker svg { width: 30px; height: 30px; transition: transform .4s linear; }
+/* כלל ה-svg הכללי (אייקונים 22px) כיווץ את שכבת הקו של Leaflet; כאן מחזירים לה את הגודל שהיא קובעת לעצמה */
+.leaflet-overlay-pane svg { width: auto; height: auto; max-width: none; flex: initial; }
 .start-marker { width: 14px; height: 14px; border-radius: 50%; background: var(--meter-fg); border: 2px solid #0a0f0c; box-shadow: 0 0 0 3px rgba(79,240,127,.35); }
 
 /* מספרים */
