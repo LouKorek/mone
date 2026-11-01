@@ -5,6 +5,9 @@ name: Store screenshots
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   shots:
     runs-on: ubuntu-latest
@@ -27,3 +30,11 @@ jobs:
         with:
           name: store-shots
           path: out/store-shots
+      # עותק בענף נפרד (store-shots-<מספר הרצה>) כדי שאפשר יהיה לעבור על הצילומים גם בלי להוריד ארטיפקט
+      - name: Publish to a screenshots branch
+        run: |
+          cd out/store-shots
+          git init -q -b shots
+          git add -A
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -q -m "store screenshots ${{ github.sha }}"
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" shots:store-shots-${{ github.run_number }}
