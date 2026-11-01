@@ -63,7 +63,7 @@ if mode != 'submit':
     raise SystemExit(0)
 
 # 1) הגשה פתוחה של גרסה קודמת: מבטלים, כדי שהגרסה החדשה תחליף אותה
-pending = [s for s in subs if s['attributes']['state'] in OPEN]
+pending = [s for s in subs if s['attributes']['state'] in OPEN and s['attributes']['state'] != 'READY_FOR_REVIEW']   # טיוטת הגשה לא ניתנת לביטול; משתמשים בה בשלב 5
 for s in pending:
     api('PATCH', f"/v1/reviewSubmissions/{s['id']}",
         {'data': {'type': 'reviewSubmissions', 'id': s['id'], 'attributes': {'canceled': True}}})
@@ -137,17 +137,20 @@ if SHOTS and os.path.isdir(SHOTS):
                     'attributes': {'uploaded': True, 'sourceFileChecksum': hashlib.md5(data).hexdigest()}}})
             note(f"{loc['attributes']['locale']} {dt}: uploaded {len(files)} screenshots")
     # מחכים שהעיבוד אצל Apple יסתיים, אחרת ההגשה נדחית
-    for _ in range(40):
+    for _ in range(80):
         states = []
         for loc in api('GET', f'/v1/appStoreVersions/{vid}/appStoreVersionLocalizations')['data']:
             for st in api('GET', f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets?limit=50")['data']:
                 states += [x['attributes'].get('assetDeliveryState', {}).get('state') for x in api('GET', f"/v1/appScreenshotSets/{st['id']}/appScreenshots?limit=50")['data']]
-        if all(x == 'COMPLETE' for x in states):
+        if states and all(x == 'COMPLETE' for x in states):
             break
         if any(x == 'FAILED' for x in states):
             note(f'screenshot processing failed: {states}', 'error')
             raise SystemExit(1)
         time.sleep(15)
+    else:
+        note(f'screenshots still processing after 20 minutes: {states}; run again with screenshots=no', 'error')
+        raise SystemExit(1)
     note(f'screenshots processed: {len(states)}')
 
 # 5) הגשה לבדיקה
