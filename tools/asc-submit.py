@@ -60,6 +60,16 @@ if not builds:
 b = builds[0]
 note(f"build {build_no}: {b['attributes']['processingState']}, usesNonExemptEncryption={b['attributes'].get('usesNonExemptEncryption')}")
 if mode != 'submit':
+    # TestFlight: מצב ה-build לבודקים, ואילו קבוצות קיבלו אותו
+    try:
+        bd = api('GET', f"/v1/builds/{b['id']}/buildBetaDetail")['data']['attributes']
+        note(f"testflight build {build_no}: internal={bd.get('internalBuildState')} external={bd.get('externalBuildState')}")
+        for g in api('GET', f"/v1/apps/{APP_ID}/betaGroups?limit=20")['data']:
+            ga = g['attributes']
+            gb = api('GET', f"/v1/betaGroups/{g['id']}/builds?limit=5&sort=-version")['data'] if not ga.get('isInternalGroup') else []
+            note(f"testflight group {ga.get('name')}: internal={ga.get('isInternalGroup')} allBuilds={ga.get('hasAccessToAllBuilds')} builds={[x['attributes']['version'] for x in gb]}")
+    except Exception as e:
+        note(f'testflight lookup failed: {e}', 'warning')
     raise SystemExit(0)
 
 # 1) הגשה פתוחה של גרסה קודמת: מבטלים, כדי שהגרסה החדשה תחליף אותה
