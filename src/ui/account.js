@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { initCloud, onUser, getUser, redirectOutcome, signInOrRegister, resetPassword, signInGoogle, signInApple, signOut, pushRides, pullRides, deleteRideCloud, deleteAccount, errorHe } from '../cloud.js';
 import { hasNativeApple } from '../native.js';
 import { loadRides, storeRides, subscribe, emit } from '../store.js';
-import { esc, icon, toast, openSheet as openSheetRaw, closeSheet, sheetOpen, sheetDepth, defineScreen, go, currentScreen } from './dom.js';
+import { esc, icon, nis0, toast, openSheet as openSheetRaw, closeSheet, sheetOpen, sheetDepth, defineScreen, go, currentScreen } from './dom.js';
 
 // גיליונות החשבון מחליפים זה את זה (התחברות ← פרופיל), מעל מה שהיה פתוח לפני כן (למשל התפריט)
 let baseDepth = -1;
@@ -96,25 +96,26 @@ export async function openAccount() {
   }
   const u = getUser();
   if (u) return openProfile(u);
-  openSheet(t('התחברות'), loginHtml(true), (b) => wireLogin(b, (u) => openProfile(u)));
+  openSheet(t('התחברות'), loginSheetHtml(), (b) => wireLogin(b, (u) => openProfile(u)));
 }
 
-// טופס ההתחברות: משותף לגיליון החשבון ולמסך הפתיחה
+// טופס ההתחברות: חלקים משותפים לגיליון החשבון ולמסך הפתיחה
 const GOOGLE_SVG = '<svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10c.8-2.3 3-4 5.6-4z"/></svg>';
-function loginHtml(emailOpen) {
+const APPLE_SVG = '<svg class="gicon" viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none"><path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2.1-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 4.9c.7-.9 1.2-2 1.1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.1.1 2.3-.6 3-1.5z"/></svg>';
+const emailFieldsHtml = () => `
+  <label class="field"><span>${t('אימייל')}</span><input data-a="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" dir="ltr"></label>
+  <label class="field"><span>${t('סיסמה')} · ${t('6 תווים לפחות')}</span><input data-a="pass" type="password" autocomplete="current-password" dir="ltr"></label>
+  <div class="between"><button type="button" class="linkbtn sm" data-a="forgot">${t('שכחתי סיסמה')}</button><span class="small">${t('נשלח מייל לאיפוס')}</span></div>
+  <button class="btn go" data-a="go" type="button">${t('התחבר')}</button>`;
+const consentHtml = () => t('בהתחברות הראשונה נפתח לך חשבון אוטומטית. בהתחברות אתה מאשר את {terms} ו{privacy}.', { terms: `<a href="#" data-doc="terms">${t('תנאי השימוש')}</a>`, privacy: `<a href="#" data-doc="privacy">${t('מדיניות הפרטיות')}</a>` });
+function loginSheetHtml() {
   return `
-    <button class="btn google" data-a="google" type="button">${GOOGLE_SVG} ${t('המשך עם Google')}</button>
-    ${hasNativeApple() ? `<button class="btn apple" data-a="apple" type="button"> ${t('המשך עם Apple')}</button>` : ''}
-    <details class="email-login"${emailOpen ? ' open' : ''}>${emailOpen ? `<summary class="or"><span>${t('או באימייל')}</span></summary>` : `<summary class="btn google">${t('המשך עם אימייל')}</summary>`}
-      <div class="email-fields">
-        <label class="field"><span>${t('אימייל')}</span><input data-a="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" dir="ltr"></label>
-        <label class="field"><span>${t('סיסמה')}</span><input data-a="pass" type="password" autocomplete="current-password" placeholder="${t('6 תווים לפחות')}" dir="ltr"></label>
-        <button class="btn ghost" data-a="go" type="button">${t('התחבר')}</button>
-        <button type="button" class="linkbtn" data-a="forgot">${t('שכחתי סיסמה')}</button>
-      </div>
-    </details>
+    <div class="col-tight"><h3 class="h2">${t('נסיעות בענן')}</h3><p class="body">${t('התחבר כדי לשמור את הנסיעות שלך בענן ולגשת אליהן מכל מכשיר')}</p></div>
+    ${emailFieldsHtml()}
     <p class="err" data-a="err" hidden></p>
-    <p class="note">${t('בהתחברות הראשונה נפתח לך חשבון אוטומטית. בהתחברות אתה מאשר את {terms} ו{privacy}.', { terms: `<a href="#" data-doc="terms">${t('תנאי השימוש')}</a>`, privacy: `<a href="#" data-doc="privacy">${t('מדיניות הפרטיות')}</a>` })}</p>`;
+    <div class="or-line"><span>${t('או')}</span></div>
+    <div class="grid2"><button class="btn ghost" data-a="google" type="button">${GOOGLE_SVG}<span>Google</span></button>${hasNativeApple() ? `<button class="btn ghost" data-a="apple" type="button">${APPLE_SVG}<span>Apple</span></button>` : ''}</div>
+    <p class="small center">${t('הנסיעות שלך נשמרות ב-Firebase (שרתי Google בתל אביב) ומסונכרנות לכל מכשיר שבו תתחבר.')} ${consentHtml()}</p>`;
 }
 function wireLogin(b, done) {
   const q = (k) => b.querySelector(`[data-a="${k}"]`);
@@ -138,42 +139,69 @@ function wireLogin(b, done) {
 // ---- מסך הפתיחה: נפתח בכל כניסה לאפליקציה כשאין משתמש מחובר ----
 defineScreen('welcome', {
   render(el) {
+    el.classList.add('dark-scope');
     el.innerHTML = `
       <div class="welcome">
-        <div class="welcome-brand"><img src="icons/logo-96.png" alt="" width="88" height="88"><h1 class="wordmark">${t('מונה')}</h1><p>${t('המחיר החוקי של כל נסיעה במונית')}</p></div>
-        <div class="welcome-card card">
-          <p class="lead">${t('התחבר כדי לשמור את הנסיעות שלך בענן ולגשת אליהן מכל מכשיר')}</p>
-          ${loginHtml(false)}
+        <div class="hero-logo"><img src="icons/icon-512.png" alt="${t('סמל מונה')}" width="112" height="112">
+          <div class="meter"><div class="lcd"><span class="free" style="font-size:30px">${t('פנוי')}</span></div></div></div>
+        <div class="lead"><h1 class="h1">${t('המחיר החוקי של כל נסיעה במונית')}</h1><p class="body">${t('מונה GPS חי, מחיר לפני שיוצאים, וקבלה מוכנה לתלונה. לפי צו המחירים שבתוקף.')}</p></div>
+        <div class="feats"><div>${icon('meter')}<span>${t('מונה חי')}</span></div><div>${icon('calc')}<span>${t('מחיר מראש')}</span></div><div>${icon('receipt')}<span>${t('קבלה ותלונה')}</span></div></div>
+        <div class="spacer"></div>
+        <div class="acts">
+          <div class="email-box col" id="emailBox" hidden>${emailFieldsHtml()}</div>
+          <p class="err" data-a="err" hidden></p>
+          <button class="btn white" data-a="google" type="button">${GOOGLE_SVG}<span>${t('המשך עם Google')}</span></button>
+          ${hasNativeApple() ? `<button class="btn apple" data-a="apple" type="button">${APPLE_SVG}<span>${t('המשך עם Apple')}</span></button>` : ''}
+          <div class="grid2"><button type="button" class="btn ghost" id="emailBtn" aria-expanded="false">${icon('mail', 's')}<span>${t('אימייל')}</span></button><button type="button" class="btn taxi" id="guestBtn">${t('המשך כאורח')}</button></div>
+          <p class="small center">${consentHtml()} ${t('"מונה" אינה אפליקציה ממשלתית')}</p>
         </div>
-        <button type="button" class="btn ghost guest" id="guestBtn">${t('המשך כאורח')}</button>
-        <p class="note center">${t('אפשר להתחבר בכל רגע מכפתור הפרופיל')}</p>
       </div>`;
     wireLogin(el, () => go('home', {}, { root: true }));
     el.querySelector('#guestBtn').addEventListener('click', () => go('home', {}, { root: true }));
+    el.querySelector('#emailBtn').addEventListener('click', (e) => {
+      const box = el.querySelector('#emailBox'), open = box.hidden;
+      box.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open));
+      if (open) setTimeout(() => box.querySelector('[data-a="email"]').focus(), 30);
+    });
     cloudUp().catch(() => {});   // טוענים את Firebase מראש כדי שהכפתורים יגיבו מיד
   },
   onHide() { const el = document.querySelector('.screen[data-screen="welcome"]'); if (el) el.innerHTML = ''; },
 });
 function openProfile(u) {
   const pid = u.providerData[0]?.providerId;
+  const rides = loadRides(), now = new Date();
+  const month = rides.filter((r) => { const d = new Date(r.at); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length;
+  const gaps = rides.reduce((a, r) => a + (r.asked > 0 && r.asked - r.total > 0.5 ? r.asked - r.total : 0), 0);
+  const av = u.photoURL ? `<span class="avatar-lg"><img src="${esc(u.photoURL)}" alt="" referrerpolicy="no-referrer"></span>` : `<span class="avatar-lg">${esc((firstName(u) || '?').charAt(0).toUpperCase())}</span>`;
   openSheet(t('החשבון שלי'), `
-    <dl class="kv"><dt>${t('שם')}</dt><dd>${esc(u.displayName || '—')}</dd><dt>${t('אימייל')}</dt><dd>${esc(u.email || '—')}</dd><dt>${t('התחברות')}</dt><dd>${pid === 'google.com' ? 'Google' : pid === 'apple.com' ? 'Apple' : t('אימייל וסיסמה')}</dd><dt>${t('נסיעות בענן')}</dt><dd>${loadRides().length}</dd></dl>
-    <p class="note">${t('הנסיעות שלך נשמרות ב-Firebase (שרתי Google בתל אביב) ומסונכרנות לכל מכשיר שבו תתחבר.')}</p>
-    <div class="actions"><button class="btn ghost" id="pOut" type="button">${t('התנתק')}</button><button class="btn ghost danger" id="pDel" type="button">${t('מחק חשבון')}</button></div>`, (b) => {
+    <section class="card profile-hero">${av}<div class="col-tight center"><b class="pname">${esc(u.displayName || firstName(u) || '—')}</b><span class="small" dir="ltr">${esc(u.email || '')}</span></div>
+      <span class="tag good">${icon('cloud', 's')}${t('מחובר · הנסיעות מסונכרנות')}</span><span class="small">${t('התחברות')}: ${pid === 'google.com' ? 'Google' : pid === 'apple.com' ? 'Apple' : t('אימייל וסיסמה')}</span></section>
+    <section class="card stats3 center"><div class="stat"><b class="num">${rides.length}</b><span class="small">${t('נסיעות בענן')}</span></div><div class="stat"><b class="num">${month}</b><span class="small">${t('החודש')}</span></div><div class="stat"><b class="num">${nis0(gaps)}</b><span class="small">${t('פערים שנחשפו')}</span></div></section>
+    <p class="small pad-x">${t('הנסיעות שלך נשמרות ב-Firebase (שרתי Google בתל אביב) ומסונכרנות לכל מכשיר שבו תתחבר.')}</p>
+    <div class="list"><button type="button" class="li" id="pSettings"><span class="lead">${icon('globe')}</span><span class="main"><b>${t('שפה וערכת צבעים')}</b></span>${icon('chev', 's chev')}</button></div>
+    <div class="list">
+      <button type="button" class="li" id="pOut"><span class="lead">${icon('logout')}</span><span class="main"><b>${t('התנתק')}</b><span>${t('הנסיעות יישארו בענן ובמכשיר')}</span></span></button>
+      <button type="button" class="li" id="pDel"><span class="lead stop">${icon('trash')}</span><span class="main"><b class="stop-text">${t('מחק חשבון')}</b><span>${t('לצמיתות, כולל כל הנסיעות בענן')}</span></span></button>
+    </div>`, (b) => {
+    b.querySelector('#pSettings').onclick = () => { closeSheet(true); go('settings'); };
     b.querySelector('#pOut').onclick = async () => { await signOut(); setHint(null); closeSheet(true); renderAccountRow(); go('welcome', {}, { root: true }); };
     b.querySelector('#pDel').onclick = () => openDeleteAccount(u);
   });
 }
 function openDeleteAccount(u) {
   const needPass = u.providerData[0]?.providerId === 'password';
+  const n = loadRides().length;
   openSheet(t('מחיקת חשבון'), `
-    <p>${t('המחיקה מוחקת לצמיתות את החשבון ואת כל הנסיעות השמורות בענן. הנסיעות שבמכשיר הזה יישארו רק אם תבחר להשאירן.')}</p>
-    ${needPass ? `<label class="field"><span>${t('סיסמה לאישור')}</span><input id="dPass" type="password" autocomplete="current-password" dir="ltr"></label>` : `<p class="note">${t('ייתכן שתתבקש לאשר מחדש את ההתחברות עם Google.')}</p>`}
-    <label class="check"><input id="dLocal" type="checkbox" checked> ${t('למחוק גם את הנסיעות שבמכשיר הזה')}</label>
-    <p class="err" id="dErr" hidden></p>
-    <div class="actions"><button class="btn danger" id="dGo" type="button">${t('מחק לצמיתות')}</button><button class="btn ghost" id="dNo" type="button">${t('ביטול')}</button></div>`, (b) => {
+    <section class="card col danger-card">
+      <div class="row"><span class="li-lead stop">${icon('trash')}</span><div class="col-tight"><b class="h3">${t('למחוק את החשבון לצמיתות?')}</b><span class="small">${t('כולל {n} נסיעות בענן. אי אפשר לשחזר.', { n })}</span></div></div>
+      <p class="small">${t('המחיקה מוחקת לצמיתות את החשבון ואת כל הנסיעות השמורות בענן. הנסיעות שבמכשיר הזה יישארו רק אם תבחר להשאירן.')}</p>
+      ${needPass ? `<label class="field"><span>${t('סיסמה לאישור')}</span><input id="dPass" type="password" autocomplete="current-password" dir="ltr"></label>` : `<p class="small">${t('ייתכן שתתבקש לאשר מחדש את ההתחברות עם Google.')}</p>`}
+      <label class="check"><input id="dLocal" type="checkbox" checked> ${t('למחוק גם את הנסיעות שבמכשיר הזה')}</label>
+      <p class="err" id="dErr" hidden></p>
+      <div class="grid2"><button class="btn ghost" id="dNo" type="button">${t('ביטול')}</button><button class="btn stop hold" id="dGo" type="button"><span class="fillbar"></span><span>${t('החזק למחיקה')}</span></button></div>
+    </section>`, (b) => {
     b.querySelector('#dNo').onclick = () => openProfile(u);
-    b.querySelector('#dGo').onclick = async () => {
+    wireHoldBtn(b.querySelector('#dGo'), async () => {
       const e = b.querySelector('#dErr'); e.hidden = true; b.querySelector('#dGo').disabled = true;
       try {
         await deleteAccount(needPass ? b.querySelector('#dPass').value : null);
@@ -181,7 +209,20 @@ function openDeleteAccount(u) {
         setHint(null); closeSheet(true); renderAccountRow(); go('welcome', {}, { root: true });
         openSheet(t('החשבון נמחק'), `<p>${t('החשבון וכל הנתונים בענן נמחקו. תודה שהשתמשת ב"מונה".')}</p>`);
       } catch (err) { e.hidden = false; e.textContent = errT(err); b.querySelector('#dGo').disabled = false; }
-    };
+    });
   });
 }
-
+// כפתור "החזק": לחיצה ארוכה של 1.2 שניות (במקלדת: Enter מבצע מיד)
+export function wireHoldBtn(btn, done, ms = 1200) {
+  let timer = 0;
+  const fill = btn.querySelector('.fillbar');
+  const cancel = () => { clearTimeout(timer); btn.classList.remove('holding'); if (fill) { fill.style.transition = 'width .15s'; fill.style.width = '0'; } };
+  btn.addEventListener('pointerdown', (e) => {
+    if (btn.disabled) return;
+    e.preventDefault(); btn.setPointerCapture?.(e.pointerId); btn.classList.add('holding');
+    if (fill) { fill.style.transition = `width ${ms}ms linear`; fill.style.width = '100%'; }
+    timer = setTimeout(() => { cancel(); done(); }, ms);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, cancel));
+  btn.addEventListener('click', (e) => { if (e.detail === 0) done(); });
+}

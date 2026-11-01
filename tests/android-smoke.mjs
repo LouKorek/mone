@@ -2,7 +2,7 @@
 // מתקינה את ה-APK, פותחת את האפליקציה, מתחברת ל-WebView דרך DevTools ובודקת ש:
 //   1) app.js רץ עד הסוף (initNative הוסיף את המחלקה native ל-<html>) – תופס קריסות טעינה כמו באג APP_URL ב-0.9.1
 //   2) הגשר ל-Capacitor והפלאגינים עובדים אחרי R8 (App, Geolocation, Filesystem, StatusBar, KeepAwake, FirebaseAuthentication)
-//   3) מסך ההערכה מחשב, ומהתפריט "התעריפים הנוכחיים" ו"שפה" נפתחים
+//   3) מסך ההערכה מחשב, ומהתפריט מסך התעריפים והגדרות השפה נפתחים
 //   4) אין FATAL EXCEPTION ב-logcat
 // שימוש: node tests/android-smoke.mjs path/to/app.apk
 import { execFileSync } from 'node:child_process';
@@ -73,22 +73,26 @@ const r = await evaluate(`(async () => {
   await t('FirebaseAuthentication.getCurrentUser', async () => JSON.stringify((await P.FirebaseAuthentication.getCurrentUser()).user));
   out.welcome = window.__mone.currentScreen();
   document.getElementById('guestBtn').click();
-  out.profileBtn = !!document.querySelector('.appbar [data-profile]');
+  out.home = window.__mone.currentScreen();
+  out.menuBtn = !!document.getElementById('menuBtn');
   document.getElementById('estimateBtn').click();
   out.screen = window.__mone.currentScreen();
+  out.profileBtn = !!document.querySelector('.screen:not([hidden]) .top [data-profile]');
   document.getElementById('when').value = '2026-09-06T10:00';
   document.getElementById('km').value = '5'; document.getElementById('minutes').value = '15';
   for (const id of ['when', 'km', 'minutes']) document.getElementById(id).dispatchEvent(new Event('input', { bubbles: true }));
-  out.calcTotal = document.getElementById('calcTotal').textContent.trim();
-  window.__mone.go('home');
+  out.calcTotal = document.getElementById('calcTotal').getAttribute('aria-label');
+  window.__mone.go('home', {}, { root: true });
   document.getElementById('menuBtn').click();
-  document.querySelector('[data-m=tariffs]').click();
-  out.tariffsSheet = !document.getElementById('sheet').hidden && document.getElementById('sheetTitle').textContent;
-  document.getElementById('sheetClose').click();
+  out.menuSheet = !document.getElementById('sheet').hidden;
+  document.querySelector('#sheet [data-m=tariffs]').click();
+  out.tariffsScreen = window.__mone.currentScreen();
+  window.__mone.go('home', {}, { root: true });
   document.getElementById('menuBtn').click();
-  document.querySelector('[data-m=language]').click();
-  out.langSheet = !document.getElementById('sheet').hidden && document.querySelectorAll('#sheetBody .langs button').length;
-  document.getElementById('sheetClose').click();
+  document.querySelector('#sheet [data-m=language]').click();
+  out.settingsScreen = window.__mone.currentScreen();
+  out.langCount = document.querySelectorAll('.screen:not([hidden]) .langs [data-lang]').length;
+  window.__mone.go('home', {}, { root: true });
   out.htmlDir = document.documentElement.dir;
   return out;
 })()`);
@@ -104,11 +108,14 @@ check('StatusBar', !/^ERROR/.test(String(r['StatusBar.getInfo'])), String(r['Sta
 check('KeepAwake', !/^ERROR/.test(String(r['KeepAwake.isSupported'])), String(r['KeepAwake.isSupported']));
 check('FirebaseAuthentication (Firebase native אחרי R8)', !/^ERROR/.test(String(r['FirebaseAuthentication.getCurrentUser'])), String(r['FirebaseAuthentication.getCurrentUser']));
 check('בלי משתמש נפתח מסך הפתיחה', r.welcome === 'welcome', String(r.welcome));
-check('כפתור פרופיל בשורה העליונה', r.profileBtn === true);
+check('"המשך כאורח" מוביל לבית', r.home === 'home', String(r.home));
+check('כפתור תפריט בבית', r.menuBtn === true);
 check('מסך ההערכה נפתח מהבית', r.screen === 'estimate', String(r.screen));
+check('כפתור פרופיל בשורה העליונה של ההערכה', r.profileBtn === true);
 check('ההערכה מחשבת (5 ק"מ, 15 דק\', ראשון 10:00 = ₪51.40)', r.calcTotal === '₪51.40', r.calcTotal);
-check('"התעריפים הנוכחיים" נפתח', r.tariffsSheet === 'התעריפים הנוכחיים', String(r.tariffsSheet));
-check('בחירת שפה נפתחת עם 4 שפות', r.langSheet === 4, String(r.langSheet));
+check('התפריט נפתח', r.menuSheet === true);
+check('"התעריפים" נפתח מהתפריט', r.tariffsScreen === 'tariffs', String(r.tariffsScreen));
+check('"שפה" פותח את ההגדרות עם 4 שפות', r.settingsScreen === 'settings' && r.langCount === 4, `${r.settingsScreen} ${r.langCount}`);
 check('כיוון עברית (rtl) כברירת מחדל', r.htmlDir === 'rtl', String(r.htmlDir));
 
 ws.close();

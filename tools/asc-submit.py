@@ -106,6 +106,50 @@ for loc in api('GET', f'/v1/appStoreVersions/{vid}/appStoreVersionLocalizations'
         {'data': {'type': 'appStoreVersionLocalizations', 'id': loc['id'], 'attributes': {'whatsNew': notes}}})
     note(f"whatsNew set for {loc['attributes']['locale']}")
 
+# 4ב) צילומי מסך חדשים (רק כש-SHOTS_DIR מוגדר): לכל שפה ולכל גודל אייפון שיש לו תיקייה, מחליפים את הצילומים
+SHOTS = os.environ.get('SHOTS_DIR')
+if SHOTS and os.path.isdir(SHOTS):
+    import hashlib
+    types = sorted(d for d in os.listdir(SHOTS) if os.path.isdir(os.path.join(SHOTS, d)))
+    for loc in api('GET', f'/v1/appStoreVersions/{vid}/appStoreVersionLocalizations')['data']:
+        sets = {x['attributes']['screenshotDisplayType']: x for x in api('GET', f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets?limit=50")['data']}
+        note(f"{loc['attributes']['locale']}: screenshot sets {', '.join(sorted(sets)) or 'none'}")
+        for dt in types:
+            if dt not in sets and dt != 'APP_IPHONE_67':
+                continue   # גדלים שלא היו בדף נשארים ריקים (Apple מקטינה מ-6.7 אינץ')
+            st = sets.get(dt) or api('POST', '/v1/appScreenshotSets', {'data': {'type': 'appScreenshotSets',
+                'attributes': {'screenshotDisplayType': dt},
+                'relationships': {'appStoreVersionLocalization': {'data': {'type': 'appStoreVersionLocalizations', 'id': loc['id']}}}}})['data']
+            for old in api('GET', f"/v1/appScreenshotSets/{st['id']}/appScreenshots?limit=50")['data']:
+                api('DELETE', f"/v1/appScreenshots/{old['id']}")
+            files = sorted(f for f in os.listdir(os.path.join(SHOTS, dt)) if f.endswith('.png'))[:10]
+            for f in files:
+                data = open(os.path.join(SHOTS, dt, f), 'rb').read()
+                sh = api('POST', '/v1/appScreenshots', {'data': {'type': 'appScreenshots',
+                    'attributes': {'fileName': f, 'fileSize': len(data)},
+                    'relationships': {'appScreenshotSet': {'data': {'type': 'appScreenshotSets', 'id': st['id']}}}}})['data']
+                for op in sh['attributes']['uploadOperations']:
+                    chunk = data[op['offset']:op['offset'] + op['length']]
+                    req = urllib.request.Request(op['url'], method=op['method'], data=chunk,
+                                                 headers={h['name']: h['value'] for h in op.get('requestHeaders', [])})
+                    urllib.request.urlopen(req).read()
+                api('PATCH', f"/v1/appScreenshots/{sh['id']}", {'data': {'type': 'appScreenshots', 'id': sh['id'],
+                    'attributes': {'uploaded': True, 'sourceFileChecksum': hashlib.md5(data).hexdigest()}}})
+            note(f"{loc['attributes']['locale']} {dt}: uploaded {len(files)} screenshots")
+    # מחכים שהעיבוד אצל Apple יסתיים, אחרת ההגשה נדחית
+    for _ in range(40):
+        states = []
+        for loc in api('GET', f'/v1/appStoreVersions/{vid}/appStoreVersionLocalizations')['data']:
+            for st in api('GET', f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets?limit=50")['data']:
+                states += [x['attributes'].get('assetDeliveryState', {}).get('state') for x in api('GET', f"/v1/appScreenshotSets/{st['id']}/appScreenshots?limit=50")['data']]
+        if all(x == 'COMPLETE' for x in states):
+            break
+        if any(x == 'FAILED' for x in states):
+            note(f'screenshot processing failed: {states}', 'error')
+            raise SystemExit(1)
+        time.sleep(15)
+    note(f'screenshots processed: {len(states)}')
+
 # 5) הגשה לבדיקה
 ready = [s for s in submissions() if s['attributes']['state'] == 'READY_FOR_REVIEW']
 sub = ready[0] if ready else api('POST', '/v1/reviewSubmissions', {'data': {

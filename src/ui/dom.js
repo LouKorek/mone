@@ -14,7 +14,8 @@ export const fmtDT = (d) => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.
 export const hm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 export const fmtDuration = (sec) => sec >= 3600 ? `${Math.floor(sec / 3600)}:${pad2(Math.floor(sec % 3600 / 60))}:${pad2(sec % 60)}` : `${pad2(Math.floor(sec / 60))}:${pad2(sec % 60)}`;
 export const toLocalInputValue = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-export const icon = (name, cls = '') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const DIR_ICONS = new Set(['back', 'chev']);   // חיצים שמתהפכים בשפות משמאל לימין
+export const icon = (name, cls = '') => `<svg class="${cls}${DIR_ICONS.has(name) ? ' dir' : ''}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 export const arrow = () => isRtl() ? '←' : '→';
 // תאריך יחסי קצר לרשימות: היום / אתמול / תאריך
 export function relDay(d) {

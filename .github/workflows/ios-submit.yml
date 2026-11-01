@@ -8,6 +8,7 @@ on:
       version: { description: 'מספר גרסה, למשל 0.11.0', required: true }
       build: { description: 'מספר build (מספר ה-run של ios.yml)', required: true }
       notes: { description: 'מה חדש', required: true }
+      screenshots: { description: 'yes = לצלם מחדש ולהחליף את צילומי המסך בדף האפליקציה', default: 'no' }
 
 jobs:
   submit:
@@ -16,6 +17,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install pyjwt cryptography
+      - uses: actions/setup-node@v4
+        if: inputs.screenshots == 'yes'
+        with:
+          node-version: 22
+      - name: Store screenshots
+        if: inputs.screenshots == 'yes'
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.48.2
+          npx playwright install --with-deps chromium
+          node build.mjs
+          node tools/store-shots.mjs out/store-shots
+          echo "SHOTS_DIR=$PWD/out/store-shots/ios" >> "$GITHUB_ENV"
+        env:
+          TZ: Asia/Jerusalem
       - name: App Store Connect
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

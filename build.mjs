@@ -85,19 +85,19 @@ const page = (key, path, lang = 'he') => {
   const enRoot = en ? `${path}../` : path;
   const html = `<!doctype html>
 <html lang="${en ? 'en' : 'he'}" dir="${en ? 'ltr' : 'rtl'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${d.title} — ${L.app}</title>
-<link rel="icon" href="${enRoot}icons/icon-64.png"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@900&family=Rubik:wght@400;500;700&display=swap">
+<link rel="icon" href="${enRoot}icons/icon-64.png"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap">
 <style>
   :root { color-scheme: light dark; }
-  body{margin:0;background:#f4f2ec;color:#171a21;font-family:"Rubik","Segoe UI",Arial,sans-serif;line-height:1.65;padding:24px 20px 60px}
-  @media (prefers-color-scheme: dark){ body{background:#0e1118;color:#ecebe4} .meta,nav{color:#8a8f9c} h2{color:#ffd666} }
+  body{margin:0;background:#F2F3EF;color:#151815;font-family:"Rubik","Segoe UI",Arial,sans-serif;line-height:1.65;padding:24px 20px 60px}
+  @media (prefers-color-scheme: dark){ body{background:#0B0E0C;color:#ECEEE9} .meta,nav{color:#8F978F} body h1,body h2,body main a{color:#FFC21A} }
   main{max-width:720px;margin:0 auto}
   header{display:flex;align-items:center;gap:12px;margin-bottom:18px}header img{width:44px;height:44px;border-radius:11px}
-  header a{color:#c9960a;text-decoration:none;font-family:"Frank Ruhl Libre",serif;font-weight:900;font-size:24px}
+  header a{color:inherit;text-decoration:none;font-weight:800;font-size:24px}
   header .lang{margin-inline-start:auto;font-family:inherit;font-weight:500;font-size:14px}
-  h1{font-family:"Frank Ruhl Libre",serif;font-size:30px;color:#c9960a;margin:0 0 8px}h2{font-size:18px;margin:22px 0 6px;color:#8a6400}
+  h1{font-size:30px;font-weight:800;margin:0 0 8px}h2{font-size:18px;margin:22px 0 6px;color:#7A5A00}
   p{margin:0 0 10px;max-width:70ch}.intro{opacity:.85}.meta{font-size:13px;margin-top:28px;border-top:1px solid #8884;padding-top:12px}
   nav{font-size:14px;margin-top:26px}
-  a{color:#c9960a}
+  a{color:#7A5A00;text-decoration-color:#FFC21A;text-decoration-thickness:2px;text-underline-offset:3px}
 </style></head><body><main>
 <header><img src="${enRoot}icons/logo-96.png" alt=""><a href="${enRoot}">${L.app}</a><a class="lang" href="${L.otherPath}">${L.other}</a></header>
 ${legalMod.docHtml(key, { standalone: true, lang })}

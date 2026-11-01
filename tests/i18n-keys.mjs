@@ -13,6 +13,12 @@ for (const m of facts.matchAll(/(['"])((?:\\.|(?!\1).)*)\1/g)) { const v = m[2].
 // מערך GOV_SOURCES (שמות המקורות מתורגמים דרך t(n); הכתובות לא)
 const gov = app.slice(app.indexOf('export const GOV_SOURCES = ['), app.indexOf('];', app.indexOf('export const GOV_SOURCES = [')));
 for (const m of gov.matchAll(/(['"])((?:\\.|(?!\1).)*)\1/g)) { const v = m[2].replace(/\\(['"\\])/g, '$1'); if (HEB.test(v)) keys.add(v); }
+// מערכי תוויות שמתורגמים דרך t(label): לשוניות, סוגי יום, סינון, ערכות צבעים, מסמכים
+for (const name of ['const TABS = [', 'const KINDS = [', 'const FILTERS = [', 'const THEMES = [', 'const LEGAL_LINKS = [']) {
+  const i = app.indexOf(name); if (i < 0) continue;
+  const arr = app.slice(i, app.indexOf('];', i));
+  for (const m of arr.matchAll(/(['"])((?:\\.|(?!\1).)*)\1/g)) { const v = m[2].replace(/\\(['"\\])/g, '$1'); if (HEB.test(v)) keys.add(v); }
+}
 // index.html: טקסטים ותכונות
 const html = read('index.html').replace(/<svg[\s\S]*?<\/svg>/g, '');
 for (const m of html.matchAll(/>([^<>]+)</g)) { const v = m[1].trim(); if (HEB.test(v)) keys.add(v); }

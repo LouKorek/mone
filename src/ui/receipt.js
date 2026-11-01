@@ -2,7 +2,7 @@
 import { t, lang, isRtl } from '../i18n.js';
 import { shareImage } from '../native.js';
 import { updateRide } from '../store.js';
-import { esc, nis, pad2, hm, openSheet, sheetContext, tariffLabelT, dayLabelT, lineLabel } from './dom.js';
+import { esc, icon, nis, pad2, hm, toast, openSheet, sheetContext, tariffLabelT, dayLabelT, lineLabel } from './dom.js';
 import { APP_URL } from './price.js';
 
 // ============ קבלה בפורמט מונה ============
@@ -21,14 +21,15 @@ export function receiptLines(ride) {
   );
   const items = ride.lines.map(l => [lineLabel(l), l.amount.toFixed(2)]);
   const foot = [[t('סה"כ לתשלום'), nis(ride.total)], [t('במזומן (עיגול)'), nis(ride.cashTotal)]];
-  if (ride.asked > 0) foot.push([t('הנהג ביקש'), nis(ride.asked)], [ride.asked - ride.total > 0.5 ? t('פער מעל המחיר המרבי') : t('פער'), nis(ride.asked - ride.total)]);
+  if (ride.asked > 0) { const over = ride.asked - ride.total > 0.5; foot.push([t('הנהג ביקש'), nis(ride.asked)], [over ? t('פער מעל המחיר המרבי') : t('פער'), (over ? '+' : '') + nis(ride.asked - ride.total), over]); }
   return { head, items, foot };
 }
 export function renderReceipt(ride) {
   const W = 480, pad = 28, lh = 30, MAP_H = 170;
   const rtl = isRtl();
   const { head, items, foot } = receiptLines(ride);
-  const mono = '"IBM Plex Mono", "Courier New", monospace', sans = '"Heebo", "Segoe UI", "Arial Hebrew", Arial, sans-serif';
+  const mono = '"JetBrains Mono", "Courier New", monospace', sans = '"Rubik", "Segoe UI", "Arial Hebrew", Arial, sans-serif';
+  const INK = '#151815', GRAY = '#5A615C';
   const hasRtlChars = (v) => /[֐-׿؀-ۿ]/.test(v);
   const hasLetters = (v) => /[A-Za-zЀ-ӿ֐-׿؀-ۿ]/.test(v);
   const track = ride.track && ride.track.length > 1 ? ride.track : null;
@@ -36,19 +37,20 @@ export function renderReceipt(ride) {
   const draw = (x, H) => {
     let y = 44;
     if (x) {
-      x.fillStyle = '#fbfaf5'; x.fillRect(0, 0, W, H);
-      x.fillStyle = '#efece3';
+      x.fillStyle = '#FFFEFA'; x.fillRect(0, 0, W, H);
+      x.fillStyle = '#E1E4DE';
       for (let i = 0; i < W; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 8, 0); x.lineTo(i + 4, 6); x.closePath(); x.fill(); x.beginPath(); x.moveTo(i, H); x.lineTo(i + 8, H); x.lineTo(i + 4, H - 6); x.closePath(); x.fill(); }
-      x.direction = rtl ? 'rtl' : 'ltr'; x.fillStyle = '#1c1f26'; x.textAlign = 'center';
-      x.font = `700 26px ${sans}`; x.fillText(lang() === 'he' ? 'מ ו נ ה' : t('מונה'), W / 2, y);
+      x.direction = rtl ? 'rtl' : 'ltr'; x.fillStyle = INK; x.textAlign = 'center';
+      x.font = `800 26px ${sans}`; x.fillText(lang() === 'he' ? 'מ ו נ ה' : t('מונה'), W / 2, y);
     }
     y += 26;
     if (x) { x.font = `500 14px ${sans}`; x.fillText(t('קבלת נסיעה · הערכה לפי צו מחירי הנסיעה במוניות'), W / 2, y); } y += 18;
-    if (x) { x.font = `12px ${sans}`; x.fillStyle = '#666'; x.fillText(t('(אינה חשבונית מס — המונה במונית הוא הקובע)'), W / 2, y); } y += 22;
-    const dash = () => { if (x) { x.strokeStyle = '#999'; x.setLineDash([4, 4]); x.beginPath(); x.moveTo(pad, y); x.lineTo(W - pad, y); x.stroke(); x.setLineDash([]); } y += 18; };
-    const row = (k, v, bold) => {
+    if (x) { x.font = `12px ${sans}`; x.fillStyle = GRAY; x.fillText(t('(אינה חשבונית מס — המונה במונית הוא הקובע)'), W / 2, y); } y += 22;
+    const dash = () => { if (x) { x.strokeStyle = '#C7CBC5'; x.lineWidth = 1.5; x.setLineDash([5, 4]); x.beginPath(); x.moveTo(pad, y); x.lineTo(W - pad, y); x.stroke(); x.setLineDash([]); } y += 18; };
+    const row = (k, v, bold, hl) => {
       if (x) {
-        x.fillStyle = '#1c1f26';
+        if (hl) { x.fillStyle = '#FFE9D6'; x.beginPath(); x.roundRect ? x.roundRect(pad - 8, y - 20, W - 2 * pad + 16, 30, 8) : x.rect(pad - 8, y - 20, W - 2 * pad + 16, 30); x.fill(); }
+        x.fillStyle = hl ? '#A34A00' : bold ? INK : '#3A403C';
         const kx = rtl ? W - pad : pad, vx = rtl ? pad : W - pad;
         x.direction = rtl ? 'rtl' : 'ltr'; x.textAlign = rtl ? 'right' : 'left'; x.font = `${bold ? 700 : 400} 15px ${sans}`;
         x.fillText(fit(x, k, W * 0.5), kx, y);
@@ -65,10 +67,12 @@ export function renderReceipt(ride) {
       y += MAP_H + 10; dash();
     }
     items.forEach(([k, v]) => row(k, v)); y += 4; dash();
-    foot.forEach(([k, v], i) => row(k, v, i === 0)); y += 4; dash();
-    if (x) { x.textAlign = 'center'; x.direction = rtl ? 'rtl' : 'ltr'; x.fillStyle = '#666'; x.font = `12px ${sans}`; x.fillText(t('חושב ב"מונה" לפי הצו שבתוקף') + ' · ' + APP_URL, W / 2, y + 4); }
+    foot.forEach(([k, v, hl], i) => row(k, v, i === 0 || hl, hl)); y += 4; dash();
+    if (x) { x.textAlign = 'center'; x.direction = rtl ? 'rtl' : 'ltr'; x.fillStyle = GRAY; x.font = `12px ${sans}`; x.fillText(t('חושב ב"מונה" לפי הצו שבתוקף') + ' · ' + APP_URL, W / 2, y + 4); }
     y += 20;
     if (x) x.fillText(ride.source === 'calc' ? (track ? t('חישוב לפי מסלול Google Maps — המונה במונית הוא הקובע') : t('הערכה לפי המרחק והזמן שהוזנו — המונה במונית הוא הקובע')) : t('מדידת GPS עשויה לסטות בכמה אחוזים מהמונה במונית'), W / 2, y + 4);
+    y += 20;
+    if (x) x.fillText(t('"מונה" אינה אפליקציה ממשלתית'), W / 2, y + 4);
     return y + 40;
   };
   const H = draw(null, 0);
@@ -76,10 +80,11 @@ export function renderReceipt(ride) {
   const x = c.getContext('2d'); x.scale(2, 2); draw(x, H);
   return c;
 }
+const INK_D = '#151815';
 function drawTrack(x, track, left, top, w, h) {
   x.save();
-  x.fillStyle = '#f1efe6'; x.strokeStyle = '#dcd8cb'; x.lineWidth = 1;
-  x.beginPath(); x.rect(left, top, w, h); x.fill(); x.stroke();
+  x.fillStyle = '#EBEDE8';
+  x.beginPath(); if (x.roundRect) x.roundRect(left, top, w, h, 8); else x.rect(left, top, w, h); x.fill();
   let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
   for (const [la, lo] of track) { minLat = Math.min(minLat, la); maxLat = Math.max(maxLat, la); minLon = Math.min(minLon, lo); maxLon = Math.max(maxLon, lo); }
   const k = Math.cos(((minLat + maxLat) / 2) * Math.PI / 180);
@@ -87,10 +92,12 @@ function drawTrack(x, track, left, top, w, h) {
   const m = 14, s = Math.min((w - 2 * m) / spanX, (h - 2 * m) / spanY);
   const ox = left + (w - spanX * s) / 2, oy = top + (h - spanY * s) / 2;
   const P = ([la, lo]) => [ox + (lo - minLon) * k * s, oy + (maxLat - la) * s];
-  x.strokeStyle = '#c99a06'; x.lineWidth = 3.5; x.lineJoin = 'round'; x.lineCap = 'round';
-  x.beginPath(); track.forEach((p, i) => { const [px, py] = P(p); if (i) x.lineTo(px, py); else x.moveTo(px, py); }); x.stroke();
-  const dot = (p, fill) => { const [px, py] = P(p); x.fillStyle = fill; x.beginPath(); x.arc(px, py, 5.5, 0, Math.PI * 2); x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 2; x.stroke(); };
-  dot(track[0], '#2e9e5b'); dot(track[track.length - 1], '#1c1f26');
+  x.lineJoin = 'round'; x.lineCap = 'round';
+  const path = () => { x.beginPath(); track.forEach((p, i) => { const [px, py] = P(p); if (i) x.lineTo(px, py); else x.moveTo(px, py); }); };
+  x.strokeStyle = '#1B1500'; x.lineWidth = 6.5; path(); x.stroke();
+  x.strokeStyle = '#FFC21A'; x.lineWidth = 4; path(); x.stroke();
+  { const [px, py] = P(track[0]); x.fillStyle = '#fff'; x.strokeStyle = INK_D; x.lineWidth = 2.5; x.beginPath(); x.arc(px, py, 5.5, 0, Math.PI * 2); x.fill(); x.stroke(); }
+  { const [px, py] = P(track[track.length - 1]); x.fillStyle = '#FFC21A'; x.fillRect(px - 6, py - 6, 12, 12); x.strokeStyle = '#1B1500'; x.lineWidth = 1.5; x.strokeRect(px - 6, py - 6, 12, 12); }
   x.restore();
 }
 export async function shareReceipt(ride, btn) {
@@ -104,21 +111,25 @@ export async function shareReceipt(ride, btn) {
     if (navigator.share) { await navigator.share({ title: t('קבלת נסיעה — מונה'), text: text + ' ' + APP_URL }); return; }
   } catch (e) { if (e.name === 'AbortError') return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
-  if (btn) btn.textContent = t('הקבלה נשמרה כתמונה');
+  toast(t('הקבלה נשמרה כתמונה'));
+}
+export function saveReceipt(ride) {
+  renderReceipt(ride).toBlob((blob) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `mone-${ride.id}.png`; a.click(); toast(t('הקבלה נשמרה כתמונה')); }, 'image/png');
 }
 export function openReceipt(ride) {
   openSheet(t('קבלת הנסיעה'), `
-    <div class="row2"><label class="field"><span>${t("מונית מס'")}</span><input id="rTaxi" type="text" inputmode="numeric" value="${esc(ride.taxi || '')}" placeholder="${t('על הגג')}"></label>
+    <div class="grid2"><label class="field"><span>${t("מונית מס'")}</span><input id="rTaxi" type="text" class="num" inputmode="numeric" value="${esc(ride.taxi || '')}" placeholder="${t('על הגג')}"></label>
     <label class="field"><span>${t('נהג')}</span><input id="rDriver" type="text" value="${esc(ride.driver || '')}" placeholder="${t('מהלוחית')}"></label></div>
-    <img id="rImg" class="receipt-img" alt="${t('קבלת נסיעה')}">
-    <div class="actions"><button class="btn primary" id="rShare" type="button">${t('שתף קבלה')}</button><button class="btn ghost" id="rComplain" type="button" data-open="complaint">${t('הגש תלונה')}</button></div>`, (b) => {
+    <div class="receipt-wrap"><img id="rImg" class="receipt-img" alt="${t('קבלת נסיעה')}"></div>
+    <button class="btn go xl" id="rShare" type="button">${icon('share')}<span>${t('שתף קבלה')}</span></button>
+    <div class="grid2"><button class="btn ghost" id="rSave" type="button">${icon('download', 's')}<span>${t('שמור תמונה')}</span></button><button class="btn ghost" id="rComplain" type="button" data-open="complaint">${icon('warn', 's')}<span>${t('הגש תלונה')}</span></button></div>`, (b) => {
     const img = b.querySelector('#rImg');
     const refresh = () => { img.src = renderReceipt(ride).toDataURL('image/png'); };
     ['rTaxi', 'rDriver'].forEach(id => b.querySelector('#' + id).addEventListener('input', (e) => { ride[id === 'rTaxi' ? 'taxi' : 'driver'] = e.target.value.trim(); if (ride.source !== 'calc') updateRide(ride); refresh(); }));
-    b.querySelector('#rShare').onclick = (e) => shareReceipt(ride, e.currentTarget);
+    b.querySelector('#rShare').onclick = (e) => shareReceipt(ride, null);
+    b.querySelector('#rSave').onclick = () => saveReceipt(ride);
     if (document.fonts?.ready) document.fonts.ready.then(refresh);
     refresh();
   });
   sheetContext(ride);
 }
-

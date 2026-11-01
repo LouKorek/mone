@@ -15,6 +15,13 @@ export function breakdownHtml(fare, opts = {}) {
     <p class="note">${esc(dayLabelT(fare.dayLabel))} · ${t('במזומן מעגלים ל-{amount}', { amount: nis(fare.cashTotal) })} · ${periodT(fare.period)} · ${t('כולל מע"מ {p}%', { p: Math.round(getTariffs().vat * 100) })}</p>`;
 }
 
+// סך התוספות (כולל מע"מ) מתוך שורות המחיר
+const SUR_KEYS = new Set(['order', 'airport', 'road6', 'seg18', 'carmel']);
+export function surchargeTotal(f) {
+  const vat = f.lines.find((l) => l.key === 'vat');
+  const base = f.lines.filter((l) => SUR_KEYS.has(l.key)).reduce((a, l) => a + l.amount, 0) * (vat ? 1 + vat.rate : 1);
+  return base + f.lines.filter((l) => l.key === 'fastlane').reduce((a, l) => a + l.amount, 0);
+}
 // הפער בין מה שהנהג ביקש למחיר המרבי
 export function diffHtml(asked, total) {
   if (!(asked > 0)) return '';
@@ -23,21 +30,31 @@ export function diffHtml(asked, total) {
   return `<div class="diff ok">${icon('check')}<div><b>${t('המחיר תקין')}</b> ${gap < -0.5 ? t('{amount} מתחת למחיר המרבי.', { amount: nis(-gap) }) : t('בדיוק לפי הצו.')}</div></div>`;
 }
 
-// חלוקת המחיר בין נוסעים
-export function splitHtml() {
-  return `<div class="split" role="group" aria-label="${t('חלוקה בין נוסעים')}"><span class="lbl">${t('חלוקה בין')}</span>
-    <button type="button" class="step" data-split="-1" aria-label="${t('פחות נוסעים')}">−</button><b class="n" aria-live="polite">2</b><button type="button" class="step" data-split="1" aria-label="${t('יותר נוסעים')}">+</button>
-    <span class="lbl">${t('נוסעים')}</span><b class="per"></b><button type="button" class="mini" data-split-share>${t('שתף')}</button></div>`;
+// חלוקת המחיר בין נוסעים: בורר 1–4 והסכום לכל אחד
+export function splitHtml({ card = true } = {}) {
+  return `<section class="${card ? 'card ' : ''}split-card" role="group" aria-label="${t('חלוקה בין נוסעים')}">
+    <div class="between"><h2 class="h3">${t('חלוקה בין נוסעים')}</h2><button type="button" class="linkbtn sm" data-split-share>${icon('share', 's')}<span>${t('שתף')}</span></button></div>
+    <div class="row split"><div class="seg grow" role="radiogroup">${[1, 2, 3, 4].map((n) => `<button type="button" role="radio" data-split="${n}">${n}</button>`).join('')}</div><b class="per num" aria-live="polite"></b></div>
+  </section>`;
 }
 export function wireSplit(root, total) {
-  const box = root.querySelector('.split'); if (!box) return;
-  let n = Math.min(8, Math.max(2, Number(prefs.passengers) || 2));
-  const render = () => { box.querySelector('.n').textContent = n; box.querySelector('.per').textContent = t('{amount} לכל אחד', { amount: nis(perPassenger(total, n)) }); };
-  box.querySelectorAll('[data-split]').forEach((b) => b.addEventListener('click', () => { n = Math.min(8, Math.max(2, n + Number(b.dataset.split))); setPref('passengers', n); render(); }));
-  box.querySelector('[data-split-share]').addEventListener('click', async () => {
-    const text = t('נסיעה במונית: סה"כ {total} — {n} נוסעים, {per} לכל אחד. (חושב ב"מונה" לפי תעריפי משרד התחבורה) {url}', { total: nis(total), n, per: nis(perPassenger(total, n)), url: 'https://' + APP_URL });
-    await shareTextAny(t('חלוקת נסיעה'), text);
-  });
+  const box = root.querySelector('.split-card'); if (!box) return;
+  box._total = total;
+  const render = () => {
+    const n = box._n;
+    box.querySelectorAll('[data-split]').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.split) === n)));
+    box.querySelector('.per').textContent = nis(perPassenger(box._total, n));
+  };
+  if (!box._wired) {
+    box._wired = true;
+    box._n = Math.min(4, Math.max(1, Number(prefs.passengers) || 2));
+    box.querySelectorAll('[data-split]').forEach((b) => b.addEventListener('click', () => { box._n = Number(b.dataset.split); setPref('passengers', box._n); render(); }));
+    box.querySelector('[data-split-share]').addEventListener('click', async () => {
+      const n = box._n, total = box._total;
+      const text = t('נסיעה במונית: סה"כ {total} — {n} נוסעים, {per} לכל אחד. (חושב ב"מונה" לפי תעריפי משרד התחבורה) {url}', { total: nis(total), n, per: nis(perPassenger(total, n)), url: 'https://' + APP_URL });
+      await shareTextAny(t('חלוקת נסיעה'), text);
+    });
+  }
   render();
 }
 export async function shareTextAny(title, text) {

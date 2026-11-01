@@ -1,0 +1,29 @@
+# צילומי מסך לחנויות מהאפליקציה האמיתית (tools/store-shots.mjs). הפעלה ידנית; התוצר: ארטיפקט store-shots
+# עם play/ (1080x1920, ל-Google Play) ו-ios/<גודל>/ (ל-App Store; ios-submit.yml מעלה אותם בעצמו עם screenshots=yes).
+name: Store screenshots
+
+on:
+  workflow_dispatch:
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Screenshots
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.48.2
+          npx playwright install --with-deps chromium
+          node build.mjs
+          node tools/store-shots.mjs out/store-shots
+        env:
+          TZ: Asia/Jerusalem
+      - uses: actions/upload-artifact@v4
+        with:
+          name: store-shots
+          path: out/store-shots

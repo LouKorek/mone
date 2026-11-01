@@ -17,7 +17,7 @@ function makeRide(start, track, minutes, opts, extra = {}) {
   return { meter: m, ride: { id: start.getTime(), at: start.toISOString(), end: new Date(start.getTime() + minutes * 60000).toISOString(), km: f.km, minutes: f.minutes, total: f.total, cashTotal: f.cashTotal, tariffLabel: f.tariffLabel, dayLabel: f.dayLabel, period: f.period, lines: f.lines, opts: { ...opts }, track, asked: null, ...extra } };
 }
 const base = { order: false, airport: null, road6: false, segment18: false, carmel: 0, fastLane: 0, eilat: false };
-const now = new Date();
+const now = process.env.SEED_NOW ? new Date(process.env.SEED_NOW) : new Date();
 // נסיעה חיה: התחילה לפני 9 דקות, 4.1 ק"מ, הזמנה טלפונית
 const liveStart = new Date(now.getTime() - 9 * 60000);
 const liveTrack = route([32.0753, 34.7750], [32.0968, 34.7735], 40);

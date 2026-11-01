@@ -4,16 +4,17 @@ import { t } from '../i18n.js';
 import { tariffAt, activePeriod, LiveMeter } from '../engine.js';
 import { SurchargeDetector, geoDistance } from '../geo.js';
 import { geoWatch, geoClear, keepAwake } from '../native.js';
-import { draft, newSurcharges, applyDetected, saveRide, saveLive, loadLive, clearLive, emit } from '../store.js';
+import { draft, newSurcharges, applyDetected, saveRide, updateRide, saveLive, loadLive, clearLive, emit } from '../store.js';
 import { rideFromMeter, compactTrack, estimate } from '../ride.js';
-import { $, icon, nis, fmtDuration, defineScreen, go, back, toast, tariffName, dayLabelT, autoName } from './dom.js';
-import { profileBtnHtml } from './account.js';
-import { renderTiles, activeCount } from './tiles.js';
+import { $, esc, icon, nis, nis0, fmtDuration, defineScreen, go, back, toast, autoName, openSheet, closeSheet, refreshScreen, tariffLabelT } from './dom.js';
+import { renderTiles, activeCount, quickChipsHtml, tapTile } from './tiles.js';
+import { roofHtml, digitsHtml, setDigits, fitDigits } from './kit.js';
+import { openComplaint } from './more.js';
 import { LiveMap, bearing, mapEmptyText } from './map.js';
 import { setNearFix } from './route.js';
 
 export const liveState = { running: false };
-const live = { meter: null, watchId: null, timer: null, lastFix: null, lastTickAt: null, wakeLock: null, speed: null, opts: newSurcharges(), track: [], det: null, detAirport: false, manual: new Set(), savedAt: null, gps: '', estimated: null, from: null, to: null };
+const live = { gpsDenied: false, meter: null, watchId: null, timer: null, lastFix: null, lastTickAt: null, wakeLock: null, speed: null, opts: newSurcharges(), track: [], det: null, detAirport: false, manual: new Set(), savedAt: null, gps: '', estimated: null, from: null, to: null };
 const map = new LiveMap('liveMap');
 let pendingReload = null;
 export const setPendingReload = (fn) => { pendingReload = fn; };
@@ -21,32 +22,54 @@ export const isRunning = () => !!live.timer;
 
 function paintNumbers() {
   if (!$('meterTotal')) return;
-  const m = live.meter;
+  const m = live.meter, running = !!live.timer;
+  $('meterState').textContent = running ? t('תפוס') : t('פנוי');
+  $('meterState').classList.toggle('busy', running);
+  $('meterTotal').classList.toggle('off', !m);
+  if ($('liveRoof')) $('liveRoof').outerHTML = roofHtml(new Date(), { id: 'liveRoof', sub: running ? 'countdown' : 'day', button: false, tariff: m ? m.snapshot().tariff : null });
   if (!m) {
-    const ti = tariffAt(new Date());
-    $('meterTotal').textContent = nis(new LiveMeter(new Date(), live.opts).snapshot().total);
-    $('meterSub').textContent = `${t('מוכן')} · ${tariffName(ti.tariff)} · ${dayLabelT(ti.label)}`;
+    const snap = new LiveMeter(new Date(), live.opts).snapshot();
+    setDigits($('meterTotal'), 0); fitDigits($('meterTotal'), 58);
+    $('meterSub').hidden = false; $('meterPace').hidden = true;
+    $('meterSub').innerHTML = t('המונה יתחיל ב-{amount} ויעלה לפי זמן ומרחק', { amount: `<b>${nis(snap.total)}</b>` });
     $('meterKm').textContent = '0.00'; $('meterTime').textContent = '00:00'; $('meterSpeed').textContent = '—';
     return;
   }
   const s = m.snapshot();
-  $('meterTotal').textContent = nis(s.total);
-  $('meterSub').textContent = `${live.timer ? t('מחיר עד עכשיו') : t('סיכום')} · ${tariffName(s.tariff)}`;
+  setDigits($('meterTotal'), s.total); fitDigits($('meterTotal'), 76);
   $('meterKm').textContent = s.km.toFixed(2);
   $('meterTime').textContent = fmtDuration(Math.round(m.seconds));
   $('meterSpeed').textContent = live.speed == null ? '—' : String(Math.round(live.speed));
-  if (live.estimated && $('meterEst')) $('meterEst').textContent = t('הערכה לפני הנסיעה: {amount}', { amount: nis(live.estimated) });
+  $('meterSub').hidden = true;
+  const pace = $('meterPace'); pace.hidden = !live.estimated;
+  if (live.estimated) {
+    $('meterEst').innerHTML = t('הערכה לפני הנסיעה: {amount}', { amount: `<b>${nis0(live.estimated)}</b>` });
+    const over = s.total > live.estimated * 1.05;
+    $('paceTag').className = 'tag pace' + (over ? ' over' : ''); $('paceTag').textContent = over ? t('מעל ההערכה') : t('בקצב');
+  }
 }
-function paintGps() { if ($('meterGps')) { $('meterGps').textContent = live.gps || t('GPS כבוי'); $('meterGps').classList.toggle('on', /±/.test(live.gps)); } }
+function paintGps() {
+  const g = $('meterGps'); if (!g) return;
+  const ok = /±/.test(live.gps), weak = /\(/.test(live.gps) && !ok, off = !live.timer && !ok;
+  g.className = 'tag led' + (ok ? '' : weak ? ' weak' : live.gpsDenied ? ' bad' : ' off');
+  g.innerHTML = `<span class="pulse"></span><span class="ell">${esc(live.gps || t('GPS כבוי'))}</span>`;
+  const w = $('gpsWarn'); if (w) w.hidden = !live.gpsDenied;
+}
 function paintTiles() {
+  const chips = $('liveChips');
+  if (chips) chips.innerHTML = quickChipsHtml(live.opts) + `<button type="button" class="chip night" id="liveMore" aria-expanded="${!$('liveTilesBox')?.hidden}">${t('עוד')} <span class="count" id="liveTileCount"></span></button>`;
   const box = $('liveTiles'); if (!box) return;
   renderTiles(box, live.opts, live.meter ? live.meter.period : activePeriod(new Date()), {
-    onChange: () => { if (live.meter) Object.assign(live.meter.opts, live.opts); paintNumbers(); paintTileCount(); },
+    onChange: () => { if (live.meter) Object.assign(live.meter.opts, live.opts); paintNumbers(); paintTiles(); },
     onManual: (k) => { if (live.meter) live.manual.add(k); },
   });
   paintTileCount();
 }
-function paintTileCount() { const n = activeCount(live.opts); const c = $('liveTileCount'); if (c) c.textContent = n ? t('{n} פעילות', { n }) : t('אין'); }
+function paintTileCount() { const n = activeCount(live.opts); const c = $('liveTileCount'); if (c) c.textContent = n ? `· ${n}` : ''; }
+export function liveSnapshot() {
+  if (!live.meter) return { total: 0, seconds: 0 };
+  return { total: live.meter.snapshot().total, seconds: Math.round(live.meter.seconds) };
+}
 
 function start(resumed) {
   if (!live.meter) { live.meter = new LiveMeter(new Date(), live.opts); live.track = []; live.manual = new Set(); }
@@ -67,7 +90,7 @@ function onTimer() {
   paintNumbers();
 }
 async function startGps() {
-  live.gps = t('מחפש לוויינים…'); paintGps();
+  live.gps = t('מחפש לוויינים…'); live.gpsDenied = false; paintGps();
   live.watchId = await geoWatch(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
 }
 // זיהוי אוטומטי של תוספות בזמן הנסיעה (רק מוסיף; מה שהמשתמש שינה ידנית – לא נוגעים)
@@ -87,7 +110,7 @@ function detect(lat, lon) {
 function onFix(pos) {
   const { latitude: lat, longitude: lon, accuracy, speed } = pos.coords; const ts = pos.timestamp;
   if (accuracy > 60) { live.gps = t("דיוק נמוך ({n} מ')", { n: Math.round(accuracy) }); paintGps(); return; }
-  live.gps = t("GPS פעיל · ±{n} מ'", { n: Math.round(accuracy) }); paintGps();
+  live.gpsDenied = false; live.gps = t("GPS פעיל · ±{n} מ'", { n: Math.round(accuracy) }); paintGps();
   setNearFix({ lat, lon });
   if (speed != null && !Number.isNaN(speed)) live.speed = speed * 3.6;
   if (live.lastFix) {
@@ -106,7 +129,7 @@ function onFix(pos) {
   live.lastFix = { lat, lon, t: ts, acc: accuracy };
   paintNumbers();
 }
-function onGpsError(err) { live.gps = err.code === 1 ? t('אין הרשאת מיקום') : err.message === 'unsupported' ? t('GPS לא נתמך') : t('אין קליטת GPS'); paintGps(); }
+function onGpsError(err) { live.gpsDenied = err.code === 1; live.gps = err.code === 1 ? t('אין הרשאת מיקום') : err.message === 'unsupported' ? t('GPS לא נתמך') : t('אין קליטת GPS'); paintGps(); }
 async function requestWakeLock() { if (await keepAwake(true)) return; try { live.wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* */ } }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && live.timer) requestWakeLock(); });
 
@@ -122,6 +145,28 @@ function stop() {
   reset();
   emit('live');
   go('summary', { ride, justEnded: true }, { replace: true });
+  openEndSheet(ride);
+}
+// "הגעת": המחיר המרבי, כמה הנהג ביקש והפער — לפני הסיכום
+function openEndSheet(ride) {
+  const facts = [t('{n} ק"מ', { n: ride.km.toFixed(1) }), t("{n} דק'", { n: Math.round(ride.minutes) }), tariffLabelT(ride.tariffLabel)].join(' · ');
+  openSheet(t('הגעת. זה המחיר המרבי:'), `
+    <div class="meter"><div class="lcd center" style="padding:18px 16px">${digitsHtml(ride.total, { size: 64 })}<p class="sub">${esc(facts)} · ${t('כולל מע"מ')}</p></div></div>
+    <div class="field soft big"><label for="endAsked">${t('כמה הנהג ביקש?')}</label><div class="row"><input id="endAsked" type="number" inputmode="decimal" min="0" step="1" placeholder="₪ 0" value="${ride.asked || ''}"><span id="endGap"></span></div></div>
+    <p class="small center" id="endNote" hidden>${t('פער מעל המחיר המרבי. אפשר להגיש תלונה למשרד התחבורה עם הקבלה.')}</p>
+    <button type="button" class="btn taxi" id="endSum">${t('לסיכום ולקבלה')}</button>
+    <div class="grid2"><button type="button" class="btn ghost" id="endComplain">${icon('shield')}${t('תלונה')}</button><button type="button" class="btn plain" id="endNew">${t('נסיעה חדשה')}</button></div>`, (b) => {
+    const paint = () => {
+      const g = ride.asked > 0 ? ride.asked - ride.total : null;
+      b.querySelector('#endGap').innerHTML = g == null ? '' : g > 0.5 ? `<span class="tag warn">${t('+{amount} מעל', { amount: nis0(g) })}</span>` : `<span class="tag good">${t('בטווח')}</span>`;
+      b.querySelector('#endNote').hidden = !(g > 0.5);
+    };
+    b.querySelector('#endAsked').addEventListener('input', (e) => { ride.asked = Number(e.target.value) || null; updateRide(ride); paint(); });
+    b.querySelector('#endSum').onclick = () => { closeSheet(true); refreshScreen(); };
+    b.querySelector('#endComplain').onclick = () => { closeSheet(true); refreshScreen(); openComplaint(ride); };
+    b.querySelector('#endNew').onclick = () => { closeSheet(true); go('home', {}, { root: true }); };
+    paint();
+  }, { onClose: () => { if (document.documentElement.dataset.screen === 'summary') refreshScreen(); } });
 }
 function reset() {
   live.meter = null; live.speed = null; live.lastFix = null; live.track = []; live.savedAt = null; live.det = null; live.manual = new Set(); live.estimated = null; live.from = null; live.to = null;
@@ -146,7 +191,6 @@ function begin(fromEstimate) {
 function paintScreenState(resumed) {
   const running = !!live.timer;
   $('liveStart').hidden = running; $('liveStop').hidden = !running;
-  $('meterHero').classList.toggle('running', running);
   $('mapEmpty').textContent = resumed ? t('הנסיעה שוחזרה מהזיכרון וממשיכה') : mapEmptyText();
   if (running) { $('mapEmpty').hidden = !!map.ensure(); live.track.forEach((pt, i) => map.addPoint(pt[0], pt[1], i > 0 ? bearing(live.track[i - 1], pt) : null)); map.resize(); }
   paintNumbers(); paintGps(); paintTiles();
@@ -155,23 +199,40 @@ function paintScreenState(resumed) {
 defineScreen('live', {
   render(el, params = {}) {
     map.destroy();
+    el.classList.add('dark-scope');
     el.innerHTML = `
-      <header class="appbar dark"><button type="button" class="iconbtn" id="liveBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1>${t('מונה חי')}</h1><span class="gps" id="meterGps">${t('GPS כבוי')}</span>${profileBtnHtml()}</header>
-      <div class="live-wrap">
-        <section class="meter-hero" id="meterHero" aria-live="off">
-          <span class="amount" id="meterTotal">₪0.00</span>
-          <span class="meta" id="meterSub"></span>
-          <span class="est" id="meterEst"></span>
-          <div class="stats"><span><b id="meterKm">0.00</b>${t('ק"מ')}</span><span><b id="meterTime">00:00</b>${t('זמן')}</span><span><b id="meterSpeed">—</b>${t('קמ"ש')}</span></div>
+      <header class="top night"><button type="button" class="ibtn night" id="liveBack" aria-label="${t('חזרה')}">${icon('back')}</button><h1 class="title live-title">${t('מונה חי')}</h1><span class="tag led off" id="meterGps"></span></header>
+      <div class="live-body">
+        <section class="meter deep" id="meterHero" aria-live="off">
+          <div class="lcd" style="padding:16px">
+            <div class="between"><span class="free state-big" id="meterState">${t('פנוי')}</span><span id="liveRoof"></span></div>
+            <div style="margin-top:12px">${digitsHtml(0, { id: 'meterTotal', size: 58, cls: 'off' })}</div>
+            <p class="sub" id="meterSub"></p>
+            <div class="between" id="meterPace" style="margin-top:8px" hidden><span class="pace" id="meterEst"></span><span class="tag pace" id="paceTag"></span></div>
+          </div>
+          <div class="meter-stats"><div><b id="meterKm">0.00</b><span>${t('ק"מ')}</span></div><div><b id="meterTime">00:00</b><span>${t('זמן')}</span></div><div><b id="meterSpeed">—</b><span>${t('קמ"ש')}</span></div></div>
         </section>
+        <div class="lcd gps-warn" id="gpsWarn" hidden><span class="pulse" style="background:#FF6B6B;box-shadow:0 0 0 4px rgba(255,107,107,.2)"></span><span><b>${t('אין הרשאת מיקום')}</b><small>${t('המונה לא יכול למדוד בלי מיקום.')}</small></span><button type="button" class="btn led sm" id="gpsRetry">${t('אפשר')}</button></div>
         <div class="map" id="liveMap"><div class="map-empty" id="mapEmpty">${mapEmptyText()}</div><button class="recenter" id="recenter" type="button" aria-label="${t('חזור למיקום')}" hidden>${icon('gps')}</button></div>
-        <details class="card details live-tiles"><summary>${t('תוספות')} <span class="count" id="liveTileCount"></span>${icon('chev', 'chev')}</summary><div class="tiles compact" id="liveTiles" role="group" aria-label="${t('תוספות לנסיעה')}"></div></details>
-        <button class="btn meter big" id="liveStart" type="button">${icon('play')}<span>${t('התחל נסיעה')}</span></button>
-        <button class="btn stop big" id="liveStop" type="button" hidden>${icon('stop')}<span>${t('סיים נסיעה')}</span></button>
+        <div class="live-chips" id="liveChips" role="group" aria-label="${t('תוספות לנסיעה')}"></div>
+        <div class="live-tiles" id="liveTilesBox" hidden><div class="tiles night" id="liveTiles" role="group" aria-label="${t('תוספות לנסיעה')}"></div></div>
+      </div>
+      <div class="live-foot">
+        <button class="btn led xl" id="liveStart" type="button">${icon('play', 'l')}<span>${t('התחל נסיעה')}</span></button>
+        <button class="btn stop xl hold" id="liveStop" type="button" hidden><span class="fillbar"></span>${icon('stop')}<span>${t('החזק לסיום הנסיעה')}</span></button>
       </div>`;
     $('liveBack').addEventListener('click', () => { if (!back()) go('home', {}, { root: true }); });
     $('liveStart').addEventListener('click', () => begin(false));
-    $('liveStop').addEventListener('click', stop);
+    wireHold($('liveStop'), stop);
+    $('gpsRetry').addEventListener('click', () => { geoClear(live.watchId); startGps(); });
+    $('liveChips').addEventListener('click', (e) => {
+      if (e.target.closest('#liveMore')) { const box = $('liveTilesBox'); box.hidden = !box.hidden; e.target.closest('#liveMore').setAttribute('aria-expanded', String(!box.hidden)); return; }
+      const c = e.target.closest('[data-chip]'); if (!c) return;
+      if (live.meter) live.manual.add(c.dataset.chip);
+      tapTile(c.dataset.chip, live.opts);
+      if (live.meter) Object.assign(live.meter.opts, live.opts);
+      paintTiles(); paintNumbers();
+    });
     map.onDrag = () => { $('recenter').hidden = false; };
     $('recenter').addEventListener('click', () => { $('recenter').hidden = true; map.recenter(live.lastFix?.lat, live.lastFix?.lon); });
     if (params.start && !live.timer) begin(!!params.fromEstimate);
@@ -179,6 +240,17 @@ defineScreen('live', {
   },
   onShow() { map.resize(); },
 });
+
+// "החזק לסיום": לחיצה ארוכה (1.2 שניות) מסיימת, כדי שנגיעה בטעות בכיס לא תעצור את המונה. במקלדת — Enter מסיים מיד.
+function wireHold(btn, done) {
+  const bar = btn.querySelector('.fillbar'); let t0 = 0, raf = 0;
+  const reset = () => { cancelAnimationFrame(raf); t0 = 0; bar.style.width = '0'; };
+  const step = () => { const p = Math.min(1, (performance.now() - t0) / 1200); bar.style.width = (p * 100) + '%'; if (p >= 1) { reset(); done(); return; } raf = requestAnimationFrame(step); };
+  btn.addEventListener('pointerdown', (e) => { if (e.button > 0) return; t0 = performance.now(); raf = requestAnimationFrame(step); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, () => { if (t0) reset(); }));
+  btn.addEventListener('click', (e) => { if (e.detail === 0) done(); });
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
 
 // שחזור נסיעה פעילה אחרי שהאפליקציה נסגרה (עד 6 שעות)
 export function restoreLive() {

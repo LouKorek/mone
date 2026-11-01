@@ -72,5 +72,11 @@ export function renderTiles(container, opts, period, cb, focusKey) {
     if (focusKey === 'fastLane') amt.focus();
   }
 }
+// צ'יפים מהירים למונה החי: שלוש התוספות הנפוצות + "עוד" שפותח את כל האריחים
+const QUICK = ['airport', 'order', 'road6'];
+export function quickChipsHtml(opts) {
+  return QUICK.map((k) => { const tile = TILES.find((x) => x.key === k), on = tile.on(opts); return `<button type="button" class="chip night${on ? ' on' : ''}" data-chip="${k}" aria-pressed="${on}">${icon(tile.icon, 's')}<span>${esc(tile.label(opts))}</span></button>`; }).join('');
+}
+export function tapTile(key, opts) { const tile = TILES.find((x) => x.key === key); if (tile) tile.tap(opts); }
 // כמה תוספות פעילות (לכותרת מקופלת)
 export const activeCount = (opts) => TILES.filter((x) => x.on(opts)).length;
