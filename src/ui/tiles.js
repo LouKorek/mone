@@ -72,11 +72,22 @@ export function renderTiles(container, opts, period, cb, focusKey) {
     if (focusKey === 'fastLane') amt.focus();
   }
 }
-// צ'יפים מהירים למונה החי: שלוש התוספות הנפוצות + "עוד" שפותח את כל האריחים
-const QUICK = ['airport', 'order', 'road6'];
-export function quickChipsHtml(opts) {
-  return QUICK.map((k) => { const tile = TILES.find((x) => x.key === k), on = tile.on(opts); return `<button type="button" class="chip night${on ? ' on' : ''}" data-chip="${k}" aria-pressed="${on}">${icon(tile.icon, 's')}<span>${esc(tile.label(opts))}</span></button>`; }).join('');
+// צ'יפים למונה החי: כל התוספות מוצגות מלכתחילה, וכל סוג הוא כפתור משלו (נתב"ג ורמון/חיפה, קטע אחד ושני קטעים בכרמל)
+const LIVE_CHIPS = [
+  { id: 'order', key: 'order', icon: 'phone', label: () => t('הזמנה'), price: (p) => sur(p.order_surcharge), on: (o) => o.order, tap: (o) => { o.order = !o.order; } },
+  { id: 'bg', key: 'airport', icon: 'plane', label: () => t('נתב"ג'), price: () => sur(S().ben_gurion), on: (o) => o.airport === 'ben-gurion', tap: (o) => { o.airport = o.airport === 'ben-gurion' ? null : 'ben-gurion'; } },
+  { id: 'ramon', key: 'airport', icon: 'plane', label: () => t('רמון / חיפה'), price: () => sur(S().ramon_or_haifa_airport), on: (o) => o.airport === 'ramon' || o.airport === 'haifa', tap: (o) => { o.airport = (o.airport === 'ramon' || o.airport === 'haifa') ? null : 'ramon'; } },
+  { id: 'road6', key: 'road6', icon: 'road', label: () => t('כביש 6'), price: () => sur(S().road6_main), on: (o) => o.road6, tap: (o) => { o.road6 = !o.road6; } },
+  { id: 'segment18', key: 'segment18', icon: 'road', label: () => t('קטע 18'), price: () => sur(S().road6_segment18), on: (o) => o.segment18, tap: (o) => { o.segment18 = !o.segment18; } },
+  { id: 'carmel1', key: 'carmel', icon: 'tunnel', label: () => t('כרמל · קטע אחד'), price: () => sur(S().carmel_tunnels_one), on: (o) => o.carmel === 1, tap: (o) => { o.carmel = o.carmel === 1 ? 0 : 1; } },
+  { id: 'carmel2', key: 'carmel', icon: 'tunnel', label: () => t('כרמל · 2 קטעים'), price: () => sur(S().carmel_tunnels_two), on: (o) => o.carmel === 2, tap: (o) => { o.carmel = o.carmel === 2 ? 0 : 2; } },
+  { id: 'fastLane', key: 'fastLane', icon: 'bolt', label: () => t('נתיב מהיר'), price: (p, o) => o.fastLane > 0 ? nis(o.fastLane) : t('לפי השלט'), on: (o) => o.fastLane > 0 || !!o.fastLaneOn, tap: (o) => { if (o.fastLane > 0 || o.fastLaneOn) { o.fastLane = 0; o.fastLaneOn = false; } else o.fastLaneOn = true; } },
+  { id: 'eilat', key: 'eilat', icon: 'palm', label: () => t('אילת'), price: () => t('ללא מע"מ'), on: (o) => o.eilat, tap: (o) => { o.eilat = !o.eilat; } },
+];
+export function liveChipsHtml(opts, period) {
+  return LIVE_CHIPS.map((c) => { const on = !!c.on(opts), label = c.label(opts); return `<button type="button" class="chip night${on ? ' on' : ''}" data-chip="${c.id}" aria-pressed="${on}" aria-label="${esc(label)}, ${esc(c.price(period, opts))}">${icon(c.icon, 's')}<span>${esc(label)}</span></button>`; }).join('');
 }
-export function tapTile(key, opts) { const tile = TILES.find((x) => x.key === key); if (tile) tile.tap(opts); }
+// מפעיל/מכבה צ'יפ; מחזיר את מפתח התוספת (לסימון "שונה ידנית")
+export function tapLiveChip(id, opts) { const c = LIVE_CHIPS.find((x) => x.id === id); if (!c) return null; c.tap(opts); return c.key; }
 // כמה תוספות פעילות (לכותרת מקופלת)
 export const activeCount = (opts) => TILES.filter((x) => x.on(opts)).length;

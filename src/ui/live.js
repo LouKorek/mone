@@ -7,7 +7,7 @@ import { geoWatch, geoClear, keepAwake } from '../native.js';
 import { draft, newSurcharges, applyDetected, saveRide, updateRide, saveLive, loadLive, clearLive, emit } from '../store.js';
 import { rideFromMeter, compactTrack, estimate } from '../ride.js';
 import { $, esc, icon, nis, nis0, fmtDuration, defineScreen, go, back, toast, autoName, openSheet, closeSheet, refreshScreen, tariffLabelT } from './dom.js';
-import { renderTiles, activeCount, quickChipsHtml, tapTile } from './tiles.js';
+import { liveChipsHtml, tapLiveChip } from './tiles.js';
 import { roofHtml, digitsHtml, setDigits, fitDigits } from './kit.js';
 import { openComplaint } from './more.js';
 import { LiveMap, bearing, mapEmptyText } from './map.js';
@@ -56,16 +56,15 @@ function paintGps() {
   const w = $('gpsWarn'); if (w) w.hidden = !live.gpsDenied;
 }
 function paintTiles() {
-  const chips = $('liveChips');
-  if (chips) chips.innerHTML = quickChipsHtml(live.opts) + `<button type="button" class="chip night" id="liveMore" aria-expanded="${!$('liveTilesBox')?.hidden}">${t('עוד')} <span class="count" id="liveTileCount"></span></button>`;
-  const box = $('liveTiles'); if (!box) return;
-  renderTiles(box, live.opts, live.meter ? live.meter.period : activePeriod(new Date()), {
-    onChange: () => { if (live.meter) Object.assign(live.meter.opts, live.opts); paintNumbers(); paintTiles(); },
-    onManual: (k) => { if (live.meter) live.manual.add(k); },
-  });
-  paintTileCount();
+  const chips = $('liveChips'); if (!chips) return;
+  chips.innerHTML = liveChipsHtml(live.opts, live.meter ? live.meter.period : activePeriod(new Date()));
+  // נתיב מהיר: הסכום שעל השלט נכתב בשדה מתחת לצ'יפים
+  const fl = $('liveFl'), flOn = live.opts.fastLane > 0 || !!live.opts.fastLaneOn;
+  if (fl && fl.hidden === flOn) {
+    fl.hidden = !flOn;
+    if (flOn) $('liveFlAmt').value = live.opts.fastLane > 0 ? live.opts.fastLane : '';
+  }
 }
-function paintTileCount() { const n = activeCount(live.opts); const c = $('liveTileCount'); if (c) c.textContent = n ? `· ${n}` : ''; }
 export function liveSnapshot() {
   if (!live.meter) return { total: 0, seconds: 0 };
   return { total: live.meter.snapshot().total, seconds: Math.round(live.meter.seconds) };
@@ -215,7 +214,7 @@ defineScreen('live', {
         <div class="lcd gps-warn" id="gpsWarn" hidden><span class="pulse" style="background:#FF6B6B;box-shadow:0 0 0 4px rgba(255,107,107,.2)"></span><span><b>${t('אין הרשאת מיקום')}</b><small>${t('המונה לא יכול למדוד בלי מיקום.')}</small></span><button type="button" class="btn led sm" id="gpsRetry">${t('אפשר')}</button></div>
         <div class="map" id="liveMap"><div class="map-empty" id="mapEmpty">${mapEmptyText()}</div><button class="recenter" id="recenter" type="button" aria-label="${t('חזור למיקום')}" hidden>${icon('gps')}</button></div>
         <div class="live-chips" id="liveChips" role="group" aria-label="${t('תוספות לנסיעה')}"></div>
-        <div class="live-tiles" id="liveTilesBox" hidden><div class="tiles night" id="liveTiles" role="group" aria-label="${t('תוספות לנסיעה')}"></div></div>
+        <div class="tile-opt live-fl" id="liveFl" hidden><label class="lbl" for="liveFlAmt">${t('נתיב מהיר – הסכום שעל השלט')}</label><span class="amt">₪<input type="number" inputmode="decimal" min="0" step="0.5" id="liveFlAmt" placeholder="0"></span></div>
       </div>
       <div class="live-foot">
         <button class="btn led xl" id="liveStart" type="button">${icon('play', 'l')}<span>${t('התחל נסיעה')}</span></button>
@@ -226,12 +225,19 @@ defineScreen('live', {
     wireHold($('liveStop'), stop);
     $('gpsRetry').addEventListener('click', () => { geoClear(live.watchId); startGps(); });
     $('liveChips').addEventListener('click', (e) => {
-      if (e.target.closest('#liveMore')) { const box = $('liveTilesBox'); box.hidden = !box.hidden; e.target.closest('#liveMore').setAttribute('aria-expanded', String(!box.hidden)); return; }
       const c = e.target.closest('[data-chip]'); if (!c) return;
-      if (live.meter) live.manual.add(c.dataset.chip);
-      tapTile(c.dataset.chip, live.opts);
-      if (live.meter) Object.assign(live.meter.opts, live.opts);
+      const key = tapLiveChip(c.dataset.chip, live.opts); if (!key) return;
+      if (live.meter) { live.manual.add(key); Object.assign(live.meter.opts, live.opts); }
       paintTiles(); paintNumbers();
+      if (key === 'fastLane' && !$('liveFl').hidden) $('liveFlAmt').focus();
+    });
+    $('liveFlAmt').addEventListener('input', (e) => {
+      if (live.meter) live.manual.add('fastLane');
+      live.opts.fastLane = Math.max(0, Number(e.target.value) || 0); live.opts.fastLaneOn = true;
+      if (live.meter) Object.assign(live.meter.opts, live.opts);
+      const chip = $('liveChips').querySelector('[data-chip="fastLane"]');
+      if (chip) chip.setAttribute('aria-label', `${t('נתיב מהיר')}, ${live.opts.fastLane > 0 ? nis(live.opts.fastLane) : t('לפי השלט')}`);
+      paintNumbers();
     });
     map.onDrag = () => { $('recenter').hidden = false; };
     $('recenter').addEventListener('click', () => { $('recenter').hidden = true; map.recenter(live.lastFix?.lat, live.lastFix?.lon); });
