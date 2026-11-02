@@ -1,30 +1,41 @@
-# מעלה ל-Google Play (Production) את ה-AAB שנבנה ב-run של android.yml, ושולח לבדיקה. הפעלה ידנית בלבד.
+# מעלה ל-Google Play את ה-AAB שנבנה ב-run של android.yml, ושולח לבדיקה. הפעלה ידנית בלבד.
+# בלי מפתחות: GitHub מתחבר ל-Google דרך Workload Identity Federation (משתני המאגר GCP_WIF_PROVIDER, GCP_PLAY_SA).
+# mode=check: רק בודק שיש גישה לאפליקציה ב-Play (לא מעלה ולא משנה כלום).
 name: Play submit
 
 on:
   workflow_dispatch:
     inputs:
-      run_id: { description: 'מזהה ה-run של android.yml שממנו לקחת את ה-AAB', required: true }
-      notes: { description: 'מה חדש (עברית)', required: true }
+      mode: { description: 'check (רק בדיקת גישה) או submit', default: 'check' }
+      run_id: { description: 'מזהה ה-run של android.yml שממנו לקחת את ה-AAB (ל-submit)', default: '' }
+      notes: { description: 'מה חדש (עברית, ל-submit)', default: '' }
+      track: { description: 'production / beta / alpha / internal', default: 'production' }
 
 permissions:
   actions: read
   contents: read
+  id-token: write
 
 jobs:
-  submit:
+  play:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        if: inputs.mode == 'submit'
         with:
           run-id: ${{ inputs.run_id }}
           github-token: ${{ github.token }}
           path: art
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_PLAY_SA }}
       - run: pip install google-api-python-client google-auth
       - name: Google Play
         env:
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          MODE: ${{ inputs.mode }}
           NOTES: ${{ inputs.notes }}
-        run: python tools/play-submit.py "$(find art -name '*.aab' | head -1)" "$NOTES"
+          TRACK: ${{ inputs.track }}
+        run: python tools/play-submit.py "$MODE" "$(find art -name '*.aab' 2>/dev/null | head -1)" "$NOTES" "$TRACK"
