@@ -1,15 +1,17 @@
 # מעלה ל-Google Play את ה-AAB שנבנה ב-run של android.yml, ושולח לבדיקה. הפעלה ידנית בלבד.
 # בלי מפתחות: GitHub מתחבר ל-Google דרך Workload Identity Federation (משתני המאגר GCP_WIF_PROVIDER, GCP_PLAY_SA).
 # mode=check: רק בודק שיש גישה לאפליקציה ב-Play (לא מעלה ולא משנה כלום).
+# screenshots=yes: מצלם מחדש (tools/store-shots.mjs) ומחליף את צילומי המסך בדף האפליקציה. mode=shots: רק צילומים, בלי AAB.
 name: Play submit
 
 on:
   workflow_dispatch:
     inputs:
-      mode: { description: 'check (רק בדיקת גישה) או submit', default: 'check' }
+      mode: { description: 'check (רק בדיקת גישה), submit או shots (רק צילומי מסך)', default: 'check' }
       run_id: { description: 'מזהה ה-run של android.yml שממנו לקחת את ה-AAB (ל-submit)', default: '' }
       notes: { description: 'מה חדש (עברית, ל-submit)', default: '' }
       track: { description: 'production / beta / alpha / internal', default: 'production' }
+      screenshots: { description: 'yes = לצלם מחדש ולהחליף את צילומי המסך בדף האפליקציה', default: 'no' }
 
 permissions:
   actions: read
@@ -28,6 +30,21 @@ jobs:
           run-id: ${{ inputs.run_id }}
           github-token: ${{ github.token }}
           path: art
+      - uses: actions/setup-node@v4
+        if: inputs.screenshots == 'yes' || inputs.mode == 'shots'
+        with:
+          node-version: 22
+      - name: Store screenshots
+        if: inputs.screenshots == 'yes' || inputs.mode == 'shots'
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.48.2
+          npx playwright install --with-deps chromium
+          node build.mjs
+          node tools/store-shots.mjs out/store-shots
+          echo "SHOTS_DIR=$PWD/out/store-shots/play" >> "$GITHUB_ENV"
+        env:
+          TZ: Asia/Jerusalem
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}

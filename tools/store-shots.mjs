@@ -13,7 +13,7 @@ const NOW = process.env.SEED_NOW || '2026-11-12T19:40:00+02:00';
 execFileSync('node', ['store/seed.mjs'], { cwd: root, env: { ...process.env, SEED_NOW: NOW, TZ: 'Asia/Jerusalem' }, stdio: 'inherit' });
 const seed = JSON.parse(readFileSync(root + 'store/seed.json', 'utf8'));
 const SIZES = [
-  ['play', 360, 640, 3],
+  ['play', 360, 720, 3],
   ['ios/APP_IPHONE_67', 430, 932, 3],
   ['ios/APP_IPHONE_65', 428, 926, 3],
   ['ios/APP_IPHONE_61', 393, 852, 3],
